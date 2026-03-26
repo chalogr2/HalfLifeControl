@@ -5,6 +5,28 @@ Building a cross-platform (iOS + Android) medication half-life tracking app from
 
 ---
 
+## User's Detailed Prompt
+
+I want to create an app for Android and iPhone. It will store information on many FDA-approved drugs and measure their half-life. Most importantly, it will track how long the medicine is actually affecting you in the form of a countdown.
+
+You will be able to select your pill stack and save it. You will also be able to manually tell the app that you just took a pill, and it will start tracking how long that pill will continue affecting you. You will also be able to set up alarms (notifications) for when it is time to take a pill. The app will ask you if you took it, and if you did, it will start counting down. If it is more than one pill, it will send all the pills in a single message when you have to take more than one pill at the same time.
+
+You can also change it so that it does not notify you and instead just assumes you will always take your pills at the scheduled time. Users will be able to cancel the countdown, letting the app know that they either do not want that pill tracked for today if it is in their stack, or that they simply do not want to track a particular pill they consumed. You will also be able to track pills without adding them to your stack and schedule.
+
+The app will show this in an easy-to-use format. People, especially older non-tech-savvy people, need to be able to simply open it, create an account or log in, and then create their pill stack or track a random pill they just took.
+
+There will be a quick introductory process in the app where, after creating an account, it will ask you if you take any medicines on a schedule and let you create a pill stack, giving you a search bar with easy-to-navigate pill options. Then, each time you choose one, it appears as added and you will be prompted to say when you take it (hour), whether it is every day, on certain days of the week, or after a certain number of days. Please also help me make this onboarding clean, easy, as simple as possible, and with the least friction while still having all these features.
+
+You will also be prompted to assign the dose you take of each pill. After doing this initial setup/onboarding, you will be taken to a simplistic but nice-looking menu where you can see your pill stack and also have buttons to add a new pill. You will see next to each pill how long it has been in your body, and if it is not active, the time you need to take the next one according to your schedule.
+
+You can also add pills without a schedule, as I said, and they will appear as “not part of your stack” in a simple-to-identify way. You will also suggest simple ways of showing this. If you take no pills on a schedule, you are simply taken to the same menu where you can add pills to take at any random moment or add pills to your stack (scheduled).
+
+If added to the stack, you will be prompted to say when you will take them, using the same process as when you say you take scheduled pills in onboarding. In both cases, whether it is a random pill you took or a pill in your stack, you will be prompted to enter the dose. For the random pill, you need to press a button that lets the app know you just took it. You can also do it retroactively, meaning you can tell the app you took it two hours ago, for example, and start tracking from there.
+
+I plan to monetize it by allowing non-subscribed users to track only one scheduled pill and up to four random pills at the same time, while pro users will be able to have more than one pill in their stack. This should be made clear to users during onboarding, before they try to make a pill stack with more than one pill, of course.
+
+---
+
 ## Tech Stack
 
 | Layer | Choice | Why |
@@ -115,10 +137,9 @@ users/{userId}
 5. **Dashboard** — main app screen
 
 Key UX principles for elderly users:
-- Large text (16px+ body, 20px+ headings)
-- 48px minimum touch targets
+- Large enough text
 - High contrast colors
-- Minimal screens in onboarding (3-4 max)
+- Minimal screens in onboarding
 - Simple language, no jargon
 - Bottom sheet modals instead of navigating to new screens where possible
 
@@ -173,7 +194,7 @@ Key UX principles for elderly users:
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Week 1–2)
+### Phase 1: Foundation 
 - Init Expo project, configure TypeScript, path aliases, Expo Router
 - Theme system with elderly-friendly defaults
 - Generic UI components (Button, Card, Input, Typography)
@@ -183,7 +204,7 @@ Key UX principles for elderly users:
 - EAS Build profiles (dev, preview, production)
 - `.gitignore`, environment config
 
-### Phase 2: Core Pill Tracking (Week 3–4)
+### Phase 2: Core Pill Tracking 
 - `src/core/halflife.ts` + unit tests
 - `src/core/scheduling.ts` + unit tests
 - `usePillStore` + Firestore CRUD
@@ -193,14 +214,16 @@ Key UX principles for elderly users:
 - "I just took this" + retroactive entry
 - Dismiss/cancel countdown
 
-### Phase 3: Drug Search + Onboarding (Week 5–6)
+### Phase 3: Drug Search + Onboarding 
 - openFDA client with caching
 - Curated half-life JSON (start with top 50 drugs, expand to 200)
 - `DrugSearchBar` with typeahead
 - Full onboarding flow (welcome → search → schedule → paywall gate)
 - Navigation guards (auth → onboarding → main)
 
-### Phase 4: Notifications (Week 7–8)
+### Phase 4: Notifications 
+- Notify user when their pills from stack are scheduled to be taken
+- Notify user when any active pill's effect duration countdown ends
 - expo-notifications setup + permissions
 - Local notification scheduling
 - Notification action handlers ("Took it" / "Snooze")
@@ -208,7 +231,7 @@ Key UX principles for elderly users:
 - Firebase Cloud Functions: backup push, auto-assume, dose cleanup
 - Test on physical devices (both platforms)
 
-### Phase 5: Subscription (Week 9–10)
+### Phase 5: Subscription 
 - RevenueCat dashboard + App Store / Google Play products
 - `react-native-purchases` integration
 - Paywall screen
@@ -216,7 +239,7 @@ Key UX principles for elderly users:
 - Webhook Cloud Function for tier sync
 - Sandbox purchase testing
 
-### Phase 6: Polish + Launch (Week 11–12)
+### Phase 6: Polish + Launch 
 - Social login (Google, Apple)
 - History/log screen
 - Settings screen (notifications, account, subscription)
