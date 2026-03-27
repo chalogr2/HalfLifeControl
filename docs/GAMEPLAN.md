@@ -27,6 +27,62 @@ I plan to monetize it by allowing non-subscribed users to track only one schedul
 
 ---
 
+## Deployment Strategy: Android First, iOS When Ready
+
+**Android is the primary deployment target.** We build and test on Android first because the developer has immediate access to an Android environment. Google Play developer account approval is pending but expected shortly.
+
+**iOS will be deployed later** once the developer has access to a Mac (expected ~early April 2026). Xcode is required only for the final build, signing, and App Store submission — NOT for writing code. All React Native / Expo code is cross-platform TypeScript, so **100% of the codebase (components, screens, services, business logic) is written once and works on both platforms.** When the Mac arrives, the workflow is simply:
+1. `git pull` the repo
+2. Install dependencies (`npm install`)
+3. Run `eas build --platform ios`
+4. Submit to App Store via `eas submit --platform ios`
+
+No code changes needed for iOS. The app is fully cross-platform by design.
+
+---
+
+## Frontend Design Reference: Stitch Assets
+
+Two folders in the repo contain pre-built frontend designs created in Stitch. These are the visual reference for all UI implementation.
+
+### `docs/stitch_halflifecontrol_html/` (PRIMARY REFERENCE)
+
+This is the **source of truth for the app's visual design**. Located at `docs/stitch_halflifecontrol_html/`. Contains 13 HTML/CSS screen mockups that define the look and feel of every screen. Each screen folder contains a `code.html` (the markup) and a `screen.png` (visual preview). All components, screens, and styling in the React Native app should match these designs as closely as possible, adapted for React Native primitives.
+
+**Screens included:**
+| Screen | Description |
+|--------|-------------|
+| `login_screen/` | Login with email/password, Google/Apple OAuth, link to Register |
+| `register_screen/` | Registration with email, password confirmation, terms acceptance, social login |
+| `final_clean_welcome_screen/` | Onboarding: "Do you take pills on a schedule?" with two CTAs |
+| `dashboard_with_balanced_timer_thickness/` | Main dashboard: "My Daily Stack" with countdown timers + "One-Time Tracking" section |
+| `refined_history_list_screen/` | Medication history with past doses and summary stats |
+| `refined_day_detail_view_screen/` | Detailed view of a specific day's medication activity |
+| `fixed_add_medication_flow/` | Multi-step form for adding a new medication |
+| `add_medication_success_popup/` | Success confirmation popup after adding a medication |
+| `final_settings_screen_with_large_legal_buttons/` | Settings page with large legal/account buttons |
+| `finalized_go_pro_screen/` | Pro subscription upgrade/paywall screen |
+| `privacy_policy/` | Privacy policy page |
+| `terms_of_service/` | Terms of service page |
+| `vitality_clear/` | Contains `DESIGN.md` — the design system documentation |
+
+**Design system highlights:**
+- **CSS framework**: Tailwind CSS with 60+ custom Material Design 3 color tokens
+- **Fonts**: `Lexend` (headlines), `Plus Jakarta Sans` (body/labels), `Material Symbols Outlined` (icons)
+- **Key colors**: Primary `#004d64` (deep teal), Secondary `#016a60`, Error `#ba1a1a`
+- **Design rules**: "No-Line Rule" (color shifts instead of borders), tonal layering for depth, glassmorphism for floating elements
+- **Accessibility**: 48px minimum touch targets, large typography scale, high contrast
+- **Card patterns**: 6px solid left-accent border for scheduled meds; 1.5px dashed borders for one-time meds
+- **Progress rings**: 12px stroke SVG circles for countdown timers
+
+**Note**: Some screens have minor inconsistencies, some may need tweaks, and there may be some duplication. The React Native implementation should treat these as the design intent and fix/normalize any inconsistencies during build.
+
+### `docs/stitch_halflifecontrol_react/` (FLOW REFERENCE ONLY — WILL BE DISCARDED)
+
+Located at `docs/stitch_halflifecontrol_react/`. A single-file React SPA (`code.html`) built from the same HTML/CSS screens. It demonstrates the app's navigation flow and screen transitions. However, it is **glitchy on several screens** (e.g., history page missing interactive buttons) and should NOT be used as a code reference. Use it only to understand the general flow between screens. This folder will be removed from the repo once the real app is built.
+
+---
+
 ## Tech Stack
 
 | Layer | Choice | Why |
@@ -46,37 +102,75 @@ I plan to monetize it by allowing non-subscribed users to track only one schedul
 ## Project Structure
 
 ```
-HalfLifeControl/
-├── app.json, eas.json, package.json, tsconfig.json
-├── .env / .env.example
-├── src/
-│   ├── app/                    # Expo Router file-based routing
-│   │   ├── _layout.tsx         # Root: providers, auth gate
-│   │   ├── (auth)/             # Login, register, forgot-password
-│   │   ├── (onboarding)/       # Welcome, drug-search, pill-schedule, paywall
-│   │   └── (main)/             # Dashboard, history, settings, pill/[id], pill/add
-│   ├── components/
-│   │   ├── ui/                 # Button, Card, Input, Typography, ProgressRing, Modal
-│   │   ├── pills/              # PillCard, PillStack, RandomPillList, CountdownTimer, DrugSearchBar, ScheduleEditor
+HalfLifeControl/                    # Repository root
+├── .gitignore                      # Git ignore rules
+├── .env                            # Environment variables — Firebase keys, RevenueCat keys, etc. (gitignored)
+├── .env.example                    # Template showing required env vars (committed, no real values)
+├── app.json                        # Expo app configuration (app name, bundle ID, plugins, splash screen)
+├── eas.json                        # EAS Build profiles (development, preview, production)
+├── package.json                    # Node dependencies and scripts
+├── tsconfig.json                   # TypeScript configuration with path aliases
+├── babel.config.js                 # Babel config for Expo/React Native
+├── metro.config.js                 # Metro bundler config
+├── README.md                       # Brief project overview + links to docs/
+│
+├── docs/                           # All documentation and design references
+│   ├── GAMEPLAN.md                 # This file — full implementation plan
+│   ├── SETUP_GUIDE.md             # Step-by-step external service setup instructions
+│   ├── stitch_halflifecontrol_html/   # PRIMARY design reference — 13 HTML/CSS screen mockups
+│   │   ├── login_screen/
+│   │   ├── register_screen/
+│   │   ├── final_clean_welcome_screen/
+│   │   ├── dashboard_with_balanced_timer_thickness/
+│   │   ├── refined_history_list_screen/
+│   │   ├── refined_day_detail_view_screen/
+│   │   ├── fixed_add_medication_flow/
+│   │   ├── add_medication_success_popup/
+│   │   ├── final_settings_screen_with_large_legal_buttons/
+│   │   ├── finalized_go_pro_screen/
+│   │   ├── privacy_policy/
+│   │   ├── terms_of_service/
+│   │   └── vitality_clear/        # Contains DESIGN.md (design system tokens)
+│   └── stitch_halflifecontrol_react/  # Flow reference only — will be removed after build
+│       └── code.html
+│
+├── src/                            # All application source code
+│   ├── app/                        # Expo Router file-based routing (screens/pages)
+│   │   ├── _layout.tsx             # Root layout: providers, auth gate
+│   │   ├── (auth)/                 # Login, register, forgot-password
+│   │   ├── (onboarding)/           # Welcome, drug-search, pill-schedule, paywall
+│   │   └── (main)/                 # Dashboard, history, settings, pill/[id], pill/add
+│   ├── components/                 # Reusable UI components
+│   │   ├── ui/                     # Generic: Button, Card, Input, Typography, ProgressRing, Modal
+│   │   ├── pills/                  # Domain: PillCard, PillStack, RandomPillList, CountdownTimer, DrugSearchBar, ScheduleEditor
 │   │   ├── notifications/
 │   │   └── subscription/
-│   ├── core/                   # PURE business logic (no React, no Firebase — extractable for Watch apps)
-│   │   ├── halflife.ts         # Decay math, concentration %, elimination time
-│   │   ├── scheduling.ts       # Next dose calculation, recurrence logic
-│   │   ├── subscription.ts     # Tier checks, entitlement helpers
-│   │   └── types.ts            # Domain types: Pill, Dose, Schedule
-│   ├── services/
-│   │   ├── firebase/           # config, auth, firestore CRUD
-│   │   ├── openfda/            # API client, types, halflife-supplement.ts (curated JSON)
-│   │   ├── notifications/      # scheduler, response handlers
-│   │   └── revenue-cat/        # config, purchase/restore/check
-│   ├── stores/                 # useAuthStore, usePillStore, useSubscriptionStore, useOnboardingStore
-│   ├── hooks/                  # useCountdown, useDrugSearch, useNotifications, useSubscription
-│   ├── utils/                  # time helpers, cache, constants
-│   └── theme/                  # Colors, spacing, fonts (16px+ body), accessibility (48px+ touch targets)
-├── assets/                     # Images, fonts, Lottie animations
-├── functions/                  # Firebase Cloud Functions (notifications, subscription webhooks)
-└── __tests__/
+│   ├── core/                       # PURE business logic (no React, no Firebase — extractable for Watch apps)
+│   │   ├── halflife.ts             # Decay math, concentration %, elimination time
+│   │   ├── scheduling.ts           # Next dose calculation, recurrence logic
+│   │   ├── subscription.ts         # Tier checks, entitlement helpers
+│   │   └── types.ts                # Domain types: Pill, Dose, Schedule
+│   ├── services/                   # External service integrations
+│   │   ├── firebase/               # config, auth, firestore CRUD
+│   │   ├── openfda/                # API client, types, halflife-supplement.ts (curated JSON)
+│   │   ├── notifications/          # scheduler, response handlers
+│   │   └── revenue-cat/            # config, purchase/restore/check
+│   ├── stores/                     # Zustand state stores: useAuthStore, usePillStore, useSubscriptionStore, useOnboardingStore
+│   ├── hooks/                      # React hooks: useCountdown, useDrugSearch, useNotifications, useSubscription
+│   ├── utils/                      # Helpers: time formatting, cache, constants
+│   └── theme/                      # Design system: colors, spacing, fonts, accessibility settings
+│
+├── assets/                         # Static assets: images, fonts, Lottie animations
+│
+├── functions/                      # Firebase Cloud Functions (server-side)
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts
+│       ├── notifications.ts        # Scheduled push notification triggers
+│       └── subscriptions.ts        # RevenueCat webhook handler
+│
+└── __tests__/                      # Test files (unit, component, integration)
 ```
 
 ---
@@ -194,30 +288,32 @@ Key UX principles for elderly users:
 
 ## Implementation Phases
 
-### Phase 1: Foundation 
+### Phase 1: Foundation (Android-first)
 - Init Expo project, configure TypeScript, path aliases, Expo Router
-- Theme system with elderly-friendly defaults
-- Generic UI components (Button, Card, Input, Typography)
+- Theme system extracted from Stitch design tokens (colors, fonts, spacing from `stitch_halflifecontrol_html/`)
+- Generic UI components (Button, Card, Input, Typography) — styled to match Stitch HTML mockups
 - Firebase setup (project, config, auth)
-- Auth screens (login, register, forgot-password)
+- Auth screens (login, register, forgot-password) — built to match `login_screen/` and `register_screen/` from Stitch
 - `useAuthStore` with Zustand
-- EAS Build profiles (dev, preview, production)
+- EAS Build profiles (dev, preview, production) — **Android builds only** initially
 - `.gitignore`, environment config
+- First Android dev build via `eas build --platform android --profile development`
 
-### Phase 2: Core Pill Tracking 
+### Phase 2: Core Pill Tracking
 - `src/core/halflife.ts` + unit tests
 - `src/core/scheduling.ts` + unit tests
 - `usePillStore` + Firestore CRUD
-- Dashboard screen with pill stack + random pills sections
-- `CountdownTimer`, `ProgressRing`, `useCountdown` hook
-- Add pill screen (manual entry, no FDA search yet)
+- Dashboard screen — match `dashboard_with_balanced_timer_thickness/` from Stitch (daily stack + one-time tracking sections)
+- `CountdownTimer`, `ProgressRing` (12px stroke SVG circles per Stitch design), `useCountdown` hook
+- Add medication flow — match `fixed_add_medication_flow/` + `add_medication_success_popup/` from Stitch
 - "I just took this" + retroactive entry
 - Dismiss/cancel countdown
 
-### Phase 3: Drug Search + Onboarding 
+### Phase 3: Drug Search + Onboarding
 - openFDA client with caching
 - Curated half-life JSON (start with top 50 drugs, expand to 200)
 - `DrugSearchBar` with typeahead
+- Onboarding welcome screen — match `final_clean_welcome_screen/` from Stitch
 - Full onboarding flow (welcome → search → schedule → paywall gate)
 - Navigation guards (auth → onboarding → main)
 
@@ -231,23 +327,34 @@ Key UX principles for elderly users:
 - Firebase Cloud Functions: backup push, auto-assume, dose cleanup
 - Test on physical devices (both platforms)
 
-### Phase 5: Subscription 
-- RevenueCat dashboard + App Store / Google Play products
+### Phase 5: Subscription
+- RevenueCat dashboard + Google Play products (App Store products added when Mac is available)
 - `react-native-purchases` integration
-- Paywall screen
+- Paywall screen — match `finalized_go_pro_screen/` from Stitch
 - Enforcement in onboarding + dashboard add-pill flow
 - Webhook Cloud Function for tier sync
-- Sandbox purchase testing
+- Sandbox purchase testing on Android
 
-### Phase 6: Polish + Launch 
+### Phase 6: Polish + Android Launch
 - Social login (Google, Apple)
-- History/log screen
-- Settings screen (notifications, account, subscription)
-- Accessibility audit (VoiceOver/TalkBack, contrast, touch targets)
+- History/log screen — match `refined_history_list_screen/` + `refined_day_detail_view_screen/` from Stitch
+- Settings screen — match `final_settings_screen_with_large_legal_buttons/` from Stitch
+- Privacy policy + Terms of Service screens — match `privacy_policy/` + `terms_of_service/` from Stitch
+- Accessibility audit (TalkBack on Android first, VoiceOver when Mac available)
 - Lottie onboarding animations
 - Crash reporting (Sentry)
-- App Store assets, privacy policy
-- TestFlight + Google Play internal testing → production release
+- Google Play Store assets, privacy policy
+- Google Play internal testing → production release
+- Remove `stitch_halflifecontrol_react/` from repo (no longer needed)
+
+### Phase 7: iOS Launch (when Mac is available)
+- `git pull` repo on Mac, install dependencies
+- Configure iOS signing via EAS (Apple Team ID, provisioning profiles)
+- `eas build --platform ios --profile production`
+- TestFlight internal testing
+- Add App Store subscription products in App Store Connect
+- Configure RevenueCat Apple app with shared secret
+- App Store assets + submission via `eas submit --platform ios`
 
 ---
 
@@ -267,5 +374,7 @@ The `useCountdown` pattern (calculate from absolute timestamps) translates direc
 2. **Component tests**: CountdownTimer, DrugSearchBar, PillCard — run with Jest + RNTL
 3. **Integration**: Full onboarding flow, add-pill flow, notification→dose creation
 4. **E2E** (Maestro): Onboarding happy path, take pill → countdown → completion, paywall flow
-5. **Manual**: Test notifications on physical iOS + Android devices, test offline behavior, test subscription sandbox purchases
-6. **Accessibility**: VoiceOver (iOS) and TalkBack (Android) walkthroughs
+5. **Manual (Android first)**: Test notifications on physical Android device, test offline behavior, test subscription sandbox purchases on Google Play
+6. **Manual (iOS later)**: Repeat manual testing on iOS physical device once Mac is available
+7. **Accessibility**: TalkBack (Android) first, VoiceOver (iOS) when Mac is available
+8. **Visual QA**: Compare each screen against corresponding Stitch HTML mockup to ensure design fidelity

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-lowest": "#ffffff",
+              "on-secondary-fixed": "#00201c",
+              "error-container": "#ffdad6",
+              "primary-fixed": "#bee9ff",
+              "on-tertiary": "#ffffff",
+              "on-surface-variant": "#3f484d",
+              "on-primary-fixed": "#001f2a",
+              "on-primary-container": "#a2e1ff",
+              "surface-dim": "#dadadd",
+              "on-tertiary-container": "#ffcea9",
+              "on-primary-fixed-variant": "#004d64",
+              "on-error-container": "#93000a",
+              "surface": "#faf9fc",
+              "surface-container-highest": "#e2e2e5",
+              "primary": "#004d64",
+              "secondary-fixed-dim": "#84d5c8",
+              "on-tertiary-fixed": "#2f1500",
+              "on-secondary-container": "#117166",
+              "secondary-container": "#9ff2e4",
+              "surface-container-high": "#e8e8eb",
+              "surface-variant": "#e2e2e5",
+              "on-surface": "#1a1c1e",
+              "on-secondary-fixed-variant": "#005048",
+              "secondary-fixed": "#9ff2e4",
+              "surface-tint": "#016684",
+              "surface-container": "#eeedf1",
+              "secondary": "#016a60",
+              "primary-container": "#006684",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#6e3900",
+              "on-primary": "#ffffff",
+              "background": "#faf9fc",
+              "outline-variant": "#bfc8cd",
+              "primary-fixed-dim": "#87d0f2",
+              "surface-bright": "#faf9fc",
+              "surface-container-low": "#f4f3f6",
+              "outline": "#70787e",
+              "inverse-on-surface": "#f1f0f4",
+              "on-background": "#1a1c1e",
+              "tertiary-container": "#904c00",
+              "tertiary": "#6d3800",
+              "on-secondary": "#ffffff",
+              "inverse-primary": "#87d0f2",
+              "tertiary-fixed-dim": "#ffb77d",
+              "tertiary-fixed": "#ffdcc3",
+              "on-error": "#ffffff",
+              "inverse-surface": "#2f3033"
+            },
+            fontFamily: {
+              "headline": ["Lexend"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1, h2, h3, .font-headline {
+            font-family: 'Lexend', sans-serif;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen selection:bg-primary-container selection:text-on-primary-fixed">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm dark:shadow-none">
+<div class="flex items-center justify-between px-6 h-16 w-full max-w-none">
+<!-- Leading Icon: Close -->
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors active:scale-95 duration-200 transition-transform p-2 inline-flex items-center justify-center">
+<span class="material-symbols-outlined">close</span>
+</button>
+<!-- Centered Brand Title -->
+<div class="absolute left-1/2 -translate-x-1/2 text-[#004d64] dark:text-[#006684] font-['Lexend'] font-bold text-xl tracking-tight">
+                HalfLifeControl
+            </div>
+<!-- Trailing Icon: Account -->
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors active:scale-95 duration-200 transition-transform p-2 inline-flex items-center justify-center">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+<!-- Separation Line -->
+<div class="bg-slate-100 dark:bg-slate-800 h-[1px] w-full absolute bottom-0"></div>
+</header>
+<main class="pt-24 pb-20 px-6 max-w-4xl mx-auto">
+<!-- Hero Section -->
+<div class="mb-12">
+<h1 class="text-4xl md:text-5xl font-extrabold text-primary mb-3 leading-tight">
+                Terms of Service
+            </h1>
+<p class="text-on-surface-variant font-medium text-lg">
+                Last updated: May 2024
+            </p>
+</div>
+<!-- Editorial Introduction -->
+<div class="mb-12 p-8 rounded-3xl bg-surface-container-low border-none">
+<p class="text-on-surface text-xl leading-relaxed font-medium">
+                Please read these terms carefully. HalfLifeControl is designed to assist with medication management, but it does not replace professional medical advice or your doctor's instructions.
+            </p>
+</div>
+<!-- Terms Content -->
+<div class="space-y-12">
+<!-- Section 1 -->
+<section class="group">
+<div class="flex items-start gap-4 mb-4">
+<div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="text-xl font-bold font-headline">1</span>
+</div>
+<h2 class="text-2xl font-bold text-on-surface pt-2">Acceptance of Terms</h2>
+</div>
+<div class="pl-16">
+<p class="text-on-surface-variant text-lg leading-relaxed mb-4">
+                        By accessing or using the HalfLifeControl application, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using or accessing this site.
+                    </p>
+<p class="text-on-surface-variant text-lg leading-relaxed">
+                        The materials contained in this application are protected by applicable copyright and trademark law. We reserve the right to update these terms at any time.
+                    </p>
+</div>
+</section>
+<!-- Section 2 -->
+<section class="group">
+<div class="flex items-start gap-4 mb-4">
+<div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="text-xl font-bold font-headline">2</span>
+</div>
+<h2 class="text-2xl font-bold text-on-surface pt-2">User Accounts</h2>
+</div>
+<div class="pl-16">
+<div class="bg-surface-container-lowest p-6 rounded-2xl mb-4 border-l-4 border-primary">
+<p class="text-on-surface-variant text-lg leading-relaxed italic">
+                            "You are responsible for maintaining the confidentiality of your account and password."
+                        </p>
+</div>
+<p class="text-on-surface-variant text-lg leading-relaxed">
+                        To access certain features of the service, you may be required to register for an account. You agree to provide accurate, current, and complete information during the registration process and to update such information to keep it accurate and complete.
+                    </p>
+</div>
+</section>
+<!-- Section 3 -->
+<section class="group">
+<div class="flex items-start gap-4 mb-4">
+<div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="text-xl font-bold font-headline">3</span>
+</div>
+<h2 class="text-2xl font-bold text-on-surface pt-2">Subscription and Billing</h2>
+</div>
+<div class="pl-16">
+<p class="text-on-surface-variant text-lg leading-relaxed mb-4">
+                        Certain aspects of the Service may be provided for a fee or other charge. If you elect to use paid aspects of the Service, you agree to the pricing and payment terms, as we may update them from time to time.
+                    </p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="p-4 rounded-xl bg-surface-container">
+<h4 class="font-bold text-primary mb-1">Billing Cycles</h4>
+<p class="text-on-surface-variant">Fees are billed at the start of the subscription period and are non-refundable.</p>
+</div>
+<div class="p-4 rounded-xl bg-surface-container">
+<h4 class="font-bold text-primary mb-1">Cancellation</h4>
+<p class="text-on-surface-variant">You may cancel your subscription at any time through your account settings.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 4 -->
+<section class="group">
+<div class="flex items-start gap-4 mb-4">
+<div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="text-xl font-bold font-headline">4</span>
+</div>
+<h2 class="text-2xl font-bold text-on-surface pt-2">Limitation of Liability</h2>
+</div>
+<div class="pl-16">
+<p class="text-on-surface-variant text-lg leading-relaxed mb-4">
+                        HalfLifeControl provides medication scheduling and tracking based on user input. In no event shall HalfLifeControl or its suppliers be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the materials on our application.
+                    </p>
+<div class="bg-error-container/30 p-6 rounded-2xl border-none">
+<div class="flex gap-3 text-on-error-container">
+<span class="material-symbols-outlined">warning</span>
+<p class="font-semibold">Medical Disclaimer</p>
+</div>
+<p class="text-on-surface-variant mt-2">
+                            Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition. Never disregard professional medical advice.
+                        </p>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer Call to Action -->
+<div class="mt-20 pt-12 border-t border-outline-variant/30 text-center">
+<p class="text-on-surface-variant mb-6 text-lg">
+                Have questions about these terms?
+            </p>
+<button class="inline-flex items-center justify-center px-8 py-4 bg-primary text-on-primary rounded-xl font-headline font-bold text-lg hover:bg-primary-container transition-all active:scale-95 shadow-lg shadow-primary/20 min-h-[64px]">
+                Contact Support
+            </button>
+</div>
+<!-- Final Legal Footer -->
+<div class="mt-24 mb-12 text-center text-on-surface-variant text-sm opacity-60">
+            © 2024 HalfLifeControl Health Systems. All rights reserved.
+        </div>
+</main>
+<!-- FAB Suppression: Per the Shell Visibility & Relevance mandate, No FAB on legal pages -->
+</body></html>

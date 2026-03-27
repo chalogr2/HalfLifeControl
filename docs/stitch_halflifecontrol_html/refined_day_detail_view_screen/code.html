@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#3f484d",
+              "on-background": "#1a1c1e",
+              "inverse-primary": "#87d0f2",
+              "inverse-on-surface": "#f1f0f4",
+              "secondary-fixed-dim": "#84d5c8",
+              "outline": "#70787e",
+              "surface-bright": "#faf9fc",
+              "primary": "#004d64",
+              "on-tertiary": "#ffffff",
+              "on-error": "#ffffff",
+              "surface-container-high": "#e8e8eb",
+              "primary-fixed-dim": "#87d0f2",
+              "on-secondary-container": "#117166",
+              "surface-container-highest": "#e2e2e5",
+              "tertiary": "#6d3800",
+              "error": "#ba1a1a",
+              "on-secondary": "#ffffff",
+              "surface-container-low": "#f4f3f6",
+              "on-primary": "#ffffff",
+              "on-primary-fixed": "#001f2a",
+              "surface-variant": "#e2e2e5",
+              "on-tertiary-fixed": "#2f1500",
+              "on-error-container": "#93000a",
+              "surface-dim": "#dadadd",
+              "on-secondary-fixed-variant": "#005048",
+              "secondary-fixed": "#9ff2e4",
+              "tertiary-fixed-dim": "#ffb77d",
+              "primary-fixed": "#bee9ff",
+              "on-tertiary-fixed-variant": "#6e3900",
+              "secondary": "#016a60",
+              "on-primary-container": "#a2e1ff",
+              "error-container": "#ffdad6",
+              "surface-tint": "#016684",
+              "inverse-surface": "#2f3033",
+              "background": "#faf9fc",
+              "tertiary-container": "#904c00",
+              "surface": "#faf9fc",
+              "primary-container": "#006684",
+              "tertiary-fixed": "#ffdcc3",
+              "surface-container-lowest": "#ffffff",
+              "on-secondary-fixed": "#00201c",
+              "surface-container": "#eeedf1",
+              "secondary-container": "#9ff2e4",
+              "on-surface": "#1a1c1e",
+              "on-primary-fixed-variant": "#004d64",
+              "on-tertiary-container": "#ffcea9",
+              "outline-variant": "#bfc8cd"
+            },
+            fontFamily: {
+              "headline": ["Lexend"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen pb-32">
+<!-- TopAppBar - Updated Layout -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+<div class="flex justify-between items-center px-6 py-4 w-full max-w-none">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[#004d64] dark:text-[#006684]">close</span>
+</button>
+<span class="text-[#004d64] dark:text-[#006684] font-headline font-bold text-2xl tracking-tight">HalfLifeControl</span>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/10">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9q-v-5DwFvP-dZZzRFOGcIqD-Qhus8rLfcE2oCP2UBXtbBRRzzj_QCeldQIsmWZrzxXmhOAJYCh9mPwqtXQP993Q5HkGxqCpVOUk8D_mLRQV_quzTjqzV9a3rqQb5VjayDUJNJXm4NIy2qIimlBjwltLTxUKt8J0Jryl7Xat59wgX4O4xq6oKrnMejoXa0q-UBMxwZQr697Vup4_bZcNtQllTS5TJlbOwOa48SVMVDJfh86muXCpI3-0X1VoAicpTqNAW9WSIVJch"/>
+</div>
+</div>
+</header>
+<main class="max-w-2xl mx-auto px-6 pt-24">
+<!-- Day Title - Updated with Primary Color -->
+<h1 class="text-[2.25rem] leading-tight font-extrabold font-headline text-primary mb-8">Monday, May 12</h1>
+<!-- Summary Header -->
+<section class="mb-10">
+<div class="bg-surface-container-low rounded-3xl p-8 flex items-center justify-between">
+<div>
+<h2 class="text-on-surface-variant font-headline font-bold text-lg mb-1">Daily Completion</h2>
+<p class="text-primary font-headline text-4xl font-extrabold">100%</p>
+<p class="text-on-surface-variant/70 text-sm mt-1">All 5 doses recorded</p>
+</div>
+<div class="relative w-24 h-24">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-variant" cx="48" cy="48" fill="transparent" r="38" stroke="currentColor" stroke-width="10"></circle>
+<circle class="text-secondary" cx="48" cy="48" fill="transparent" r="38" stroke="currentColor" stroke-dasharray="238.76" stroke-dashoffset="0" stroke-width="10"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-3xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Timeline Section -->
+<div class="space-y-6">
+<!-- Morning Group -->
+<div class="flex items-center gap-3 mb-4">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">wb_sunny</span>
+<h3 class="font-headline font-bold text-on-surface-variant uppercase tracking-wider text-sm">Morning Medications</h3>
+</div>
+<!-- Card 1: Aspirin -->
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 flex items-center gap-6 shadow-sm border-l-[6px] border-primary">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0">
+<div class="w-8 h-8 rounded-full bg-white shadow-inner flex items-center justify-center">
+<div class="w-4 h-4 rounded-full bg-white border border-outline-variant"></div>
+</div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<h4 class="text-2xl font-headline font-bold text-on-surface">Aspirin</h4>
+<span class="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined" style="font-size: 14px; font-variation-settings: 'FILL' 1;">check</span> TAKEN
+                        </span>
+</div>
+<p class="text-on-surface-variant font-medium text-lg">81mg</p>
+<div class="flex items-center gap-2 mt-2 text-on-surface-variant/70">
+<span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+<span class="font-semibold">Taken at 8:05 AM</span>
+</div>
+</div>
+</div>
+<!-- Card 2: Atorvastatin -->
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 flex items-center gap-6 shadow-sm border-l-[6px] border-primary">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0">
+<div class="w-10 h-5 rounded-full bg-[#FFD700] shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-white/20 w-1/2"></div>
+</div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<h4 class="text-2xl font-headline font-bold text-on-surface">Atorvastatin</h4>
+<span class="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined" style="font-size: 14px; font-variation-settings: 'FILL' 1;">check</span> TAKEN
+                        </span>
+</div>
+<p class="text-on-surface-variant font-medium text-lg">20mg</p>
+<div class="flex items-center gap-2 mt-2 text-on-surface-variant/70">
+<span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+<span class="font-semibold">Taken at 8:12 AM</span>
+</div>
+</div>
+</div>
+<!-- Afternoon Group -->
+<div class="flex items-center gap-3 pt-6 mb-4">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">light_mode</span>
+<h3 class="font-headline font-bold text-on-surface-variant uppercase tracking-wider text-sm">Afternoon Medications</h3>
+</div>
+<!-- Card 3: Metformin -->
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 flex items-center gap-6 shadow-sm border-l-[6px] border-primary">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0">
+<div class="w-10 h-10 rounded-full bg-[#E3F2FD] border-2 border-white shadow-sm flex items-center justify-center">
+<span class="text-[10px] font-bold text-blue-400">M500</span>
+</div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<h4 class="text-2xl font-headline font-bold text-on-surface">Metformin</h4>
+<span class="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined" style="font-size: 14px; font-variation-settings: 'FILL' 1;">check</span> TAKEN
+                        </span>
+</div>
+<p class="text-on-surface-variant font-medium text-lg">500mg</p>
+<div class="flex items-center gap-2 mt-2 text-on-surface-variant/70">
+<span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+<span class="font-semibold">Taken at 1:30 PM</span>
+</div>
+</div>
+</div>
+<!-- Evening Group -->
+<div class="flex items-center gap-3 pt-6 mb-4">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">dark_mode</span>
+<h3 class="font-headline font-bold text-on-surface-variant uppercase tracking-wider text-sm">Evening Medications</h3>
+</div>
+<!-- Card 4: Lisinopril -->
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 flex items-center gap-6 shadow-sm border-l-[6px] border-primary">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0">
+<div class="w-8 h-8 rounded-full bg-[#FFCDD2] border border-white shadow-sm"></div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<h4 class="text-2xl font-headline font-bold text-on-surface">Lisinopril</h4>
+<span class="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined" style="font-size: 14px; font-variation-settings: 'FILL' 1;">check</span> TAKEN
+                        </span>
+</div>
+<p class="text-on-surface-variant font-medium text-lg">10mg</p>
+<div class="flex items-center gap-2 mt-2 text-on-surface-variant/70">
+<span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+<span class="font-semibold">Taken at 8:45 PM</span>
+</div>
+</div>
+</div>
+<!-- Card 5: Melatonin -->
+<div class="bg-surface-container rounded-[2rem] p-6 flex items-center gap-6 shadow-sm border-l-[6px] border-primary border-[1.5px] border-dashed border-outline-variant/40">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0">
+<div class="w-6 h-6 rounded-full bg-[#9575CD] shadow-sm"></div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<h4 class="text-2xl font-headline font-bold text-on-surface">Melatonin</h4>
+<span class="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined" style="font-size: 14px; font-variation-settings: 'FILL' 1;">check</span> TAKEN
+                        </span>
+</div>
+<p class="text-on-surface-variant font-medium text-lg">5mg</p>
+<div class="flex items-center gap-2 mt-2 text-on-surface-variant/70">
+<span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+<span class="font-semibold">Taken at 9:55 PM</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Feedback Section -->
+<div class="mt-12 p-8 bg-primary/5 rounded-[2.5rem] text-center border-2 border-primary/10">
+<span class="material-symbols-outlined text-primary text-5xl mb-4" style="font-variation-settings: 'FILL' 1;">award_star</span>
+<h3 class="font-headline font-bold text-primary text-xl">Great Consistency!</h3>
+<p class="text-on-surface-variant mt-2 max-w-xs mx-auto">You have followed your medication plan perfectly for 7 days in a row.</p>
+</div>
+</main>
+<!-- BottomNavBar - Updated Labels -->
+<nav class="fixed bottom-0 left-0 w-full z-50 rounded-t-[2rem] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+<div class="flex justify-around items-center px-4 pb-8 pt-4 w-full">
+<a class="flex flex-col items-center justify-center bg-[#006684]/10 text-[#004d64] dark:text-white rounded-2xl px-6 py-2 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-size: 28px; font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-xs font-semibold font-label">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-6 py-2 hover:text-[#006684] transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-size: 28px;">history</span>
+<span class="text-xs font-semibold font-label">History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-6 py-2 hover:text-[#006684] transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-size: 28px;">settings</span>
+<span class="text-xs font-semibold font-label">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>

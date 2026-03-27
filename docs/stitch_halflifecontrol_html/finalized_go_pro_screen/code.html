@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HalfLifeControl Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-on-surface": "#f1f0f4",
+              "on-secondary": "#ffffff",
+              "surface-variant": "#e2e2e5",
+              "outline-variant": "#bfc8cd",
+              "primary-container": "#006684",
+              "on-primary-fixed": "#001f2a",
+              "primary": "#004d64",
+              "on-tertiary-fixed": "#2f1500",
+              "background": "#faf9fc",
+              "on-tertiary-container": "#ffcea9",
+              "surface-bright": "#faf9fc",
+              "on-tertiary": "#ffffff",
+              "primary-fixed-dim": "#87d0f2",
+              "on-surface": "#1a1c1e",
+              "on-primary": "#ffffff",
+              "on-tertiary-fixed-variant": "#6e3900",
+              "on-surface-variant": "#3f484d",
+              "secondary-container": "#9ff2e4",
+              "secondary-fixed-dim": "#84d5c8",
+              "error": "#ba1a1a",
+              "surface-container-highest": "#e2e2e5",
+              "on-secondary-fixed": "#00201c",
+              "secondary": "#016a60",
+              "outline": "#70787e",
+              "tertiary-fixed-dim": "#ffb77d",
+              "tertiary-container": "#904c00",
+              "error-container": "#ffdad6",
+              "on-primary-container": "#a2e1ff",
+              "secondary-fixed": "#9ff2e4",
+              "surface-container-low": "#f4f3f6",
+              "on-secondary-fixed-variant": "#005048",
+              "surface-tint": "#016684",
+              "on-secondary-container": "#117166",
+              "on-error-container": "#93000a",
+              "inverse-primary": "#87d0f2",
+              "on-error": "#ffffff",
+              "surface-container-high": "#e8e8eb",
+              "inverse-surface": "#2f3033",
+              "tertiary-fixed": "#ffdcc3",
+              "surface-container-lowest": "#ffffff",
+              "surface-dim": "#dadadd",
+              "on-background": "#1a1c1e",
+              "surface-container": "#eeedf1",
+              "surface": "#faf9fc",
+              "tertiary": "#6d3800",
+              "primary-fixed": "#bee9ff",
+              "on-primary-fixed-variant": "#004d64"
+            },
+            fontFamily: {
+              "headline": ["Lexend"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .pill-gradient {
+            background: linear-gradient(135deg, #004d64 0%, #006684 100%);
+        }
+        .feature-card {
+            border-left: 6px solid #006684;
+            height: 132px; /* Increased height from 110px for taller uniform cards */
+        }
+    </style>
+<style>
+        body {
+          min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-4 max-w-none">
+<div class="flex items-center gap-3">
+<button class="p-2 hover:bg-slate-100 transition-colors rounded-full active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary" data-icon="close">close</span>
+</button>
+<h1 class="font-headline font-bold text-2xl tracking-tight text-primary">HalfLifeControl</h1>
+</div>
+<div class="bg-primary/10 px-4 py-1.5 rounded-full">
+<span class="text-primary font-bold font-label uppercase text-xs tracking-widest">Pro</span>
+</div>
+</header>
+<main class="pt-24 pb-48 px-6 max-w-2xl mx-auto">
+<!-- Hero Section -->
+<section class="text-center mb-10">
+<div class="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary-fixed mb-6 shadow-sm">
+<span class="material-symbols-outlined text-primary text-4xl" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<h2 class="font-headline text-4xl font-extrabold text-on-surface leading-tight mb-4">Get the most out of HalfLifeControl</h2>
+<p class="font-body text-xl text-on-surface-variant leading-relaxed">Track your entire pill stack with a Pro subscription.</p>
+</section>
+<!-- Feature Cards -->
+<div class="space-y-4 mb-12">
+<!-- Benefit 1 -->
+<div class="bg-surface-container-lowest feature-card px-6 rounded-r-[1.5rem] rounded-l-[0.5rem] shadow-sm flex items-center gap-5">
+<div class="bg-secondary/10 p-3 rounded-2xl shrink-0">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="pill">pill</span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<h3 class="font-headline font-bold text-lg text-on-surface leading-snug">Unlimited scheduled pills</h3>
+<p class="font-body text-on-surface-variant text-sm mt-0.5">Free users are limited to 1 scheduled pill</p>
+</div>
+</div>
+<!-- Benefit 2 -->
+<div class="bg-surface-container-lowest feature-card px-6 rounded-r-[1.5rem] rounded-l-[0.5rem] shadow-sm flex items-center gap-5">
+<div class="bg-secondary/10 p-3 rounded-2xl shrink-0">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="history">history</span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<h3 class="font-headline font-bold text-lg text-on-surface leading-snug">Unlimited random tracking</h3>
+<p class="font-body text-on-surface-variant text-sm mt-0.5">Track as many as-needed doses as you like</p>
+</div>
+</div>
+<!-- Benefit 3 -->
+<div class="bg-surface-container-lowest feature-card px-6 rounded-r-[1.5rem] rounded-l-[0.5rem] shadow-sm flex items-center gap-5">
+<div class="bg-secondary/10 p-3 rounded-2xl shrink-0">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="watch">watch</span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<h3 class="font-headline font-bold text-lg text-on-surface leading-snug">Future features sync</h3>
+<p class="font-body text-on-surface-variant text-sm mt-0.5">Includes Apple Watch &amp; Apple Health integration</p>
+</div>
+</div>
+</div>
+<!-- Pricing Options -->
+<div class="space-y-4 mb-12">
+<!-- Annual - Highlighted -->
+<div class="relative bg-surface-container-lowest p-1 rounded-[2.5rem] ring-4 ring-primary-container/20 shadow-lg">
+<div class="absolute -top-4 right-8 bg-secondary px-4 py-1 rounded-full shadow-lg">
+<span class="text-on-secondary font-headline font-bold text-xs uppercase tracking-tighter">Best value!</span>
+</div>
+<div class="flex items-center justify-between p-6 bg-primary/5 rounded-[2.25rem]">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full border-2 border-primary flex items-center justify-center bg-primary">
+<span class="material-symbols-outlined text-on-primary text-xl" data-icon="check" style="font-variation-settings: 'wght' 700;">check</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-xl text-primary">Annual Plan</h4>
+<p class="text-on-surface-variant font-medium">$39.99/year</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-headline font-bold text-2xl text-primary">$3.33</span>
+<p class="text-xs font-bold text-on-surface-variant">per month</p>
+</div>
+</div>
+</div>
+<!-- Monthly -->
+<div class="bg-surface-container-lowest p-7 rounded-[2.5rem] border border-surface-variant/50 flex items-center justify-between group cursor-pointer hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full border-2 border-outline flex items-center justify-center group-hover:border-primary transition-colors"></div>
+<div>
+<h4 class="font-headline font-bold text-xl text-on-surface">Monthly Plan</h4>
+<p class="text-on-surface-variant font-medium">Cancel anytime</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-headline font-bold text-2xl text-on-surface">$4.99</span>
+<p class="text-xs font-bold text-on-surface-variant">per month</p>
+</div>
+</div>
+</div>
+</main>
+<!-- Fixed Bottom Action Area -->
+<footer class="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl px-6 pb-10 pt-4 z-50 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.08)]">
+<div class="max-w-md mx-auto space-y-4">
+<button class="w-full pill-gradient h-16 rounded-[1.5rem] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-xl shadow-primary/20">
+<span class="text-on-primary font-headline font-bold text-xl tracking-tight">Upgrade to Pro</span>
+<span class="material-symbols-outlined text-on-primary" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<div class="flex items-center justify-center gap-6">
+<button class="text-primary font-body font-bold text-sm hover:underline py-2 active:scale-95 transition-transform">Restore purchase</button>
+<div class="h-1 w-1 rounded-full bg-outline-variant"></div>
+<button class="text-on-surface-variant font-body font-bold text-sm hover:underline py-2 active:scale-95 transition-transform">Continue with Free</button>
+</div>
+</div>
+</footer>
+</body></html>

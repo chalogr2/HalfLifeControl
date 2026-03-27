@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "inverse-on-surface": "#f1f0f4",
+                        "on-secondary": "#ffffff",
+                        "surface-variant": "#e2e2e5",
+                        "outline-variant": "#bfc8cd",
+                        "primary-container": "#006684",
+                        "on-primary-fixed": "#001f2a",
+                        "primary": "#004d64",
+                        "on-tertiary-fixed": "#2f1500",
+                        "background": "#faf9fc",
+                        "on-tertiary-container": "#ffcea9",
+                        "surface-bright": "#faf9fc",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed-dim": "#87d0f2",
+                        "on-surface": "#1a1c1e",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed-variant": "#6e3900",
+                        "on-surface-variant": "#3f484d",
+                        "secondary-container": "#9ff2e4",
+                        "secondary-fixed-dim": "#84d5c8",
+                        "error": "#ba1a1a",
+                        "surface-container-highest": "#e2e2e5",
+                        "on-secondary-fixed": "#00201c",
+                        "secondary": "#016a60",
+                        "outline": "#70787e",
+                        "tertiary-fixed-dim": "#ffb77d",
+                        "tertiary-container": "#904c00",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#a2e1ff",
+                        "secondary-fixed": "#9ff2e4",
+                        "surface-container-low": "#f4f3f6",
+                        "on-secondary-fixed-variant": "#005048",
+                        "surface-tint": "#016684",
+                        "on-secondary-container": "#117166",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#87d0f2",
+                        "on-error": "#ffffff",
+                        "surface-container-high": "#e8e8eb",
+                        "inverse-surface": "#2f3033",
+                        "tertiary-fixed": "#ffdcc3",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-dim": "#dadadd",
+                        "on-background": "#1a1c1e",
+                        "surface-container": "#eeedf1",
+                        "surface": "#faf9fc",
+                        "tertiary": "#6d3800",
+                        "primary-fixed": "#bee9ff",
+                        "on-primary-fixed-variant": "#004d64"
+                    },
+                    fontFamily: {
+                        "headline": ["Lexend"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #faf9fc;
+        }
+        .step-active {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .step-inactive {
+            opacity: 0.4;
+            transform: translateY(10px);
+            pointer-events: none;
+            filter: grayscale(1);
+        }
+        .pill-shadow {
+            box-shadow: 0 20px 40px -12px rgba(0, 77, 100, 0.12);
+        }
+        /* Custom scrollbar for horizontal suggestion chips */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased min-h-screen pb-32">
+<!-- Full-screen Modal Style Header -->
+<header class="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-xl border-b border-surface-container flex justify-between items-center px-6 py-4">
+<button class="w-12 h-12 flex items-center justify-center text-on-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+<h1 class="font-headline font-bold text-lg tracking-tight text-on-surface">Refined Add Medication V2</h1>
+<div class="w-12"></div> <!-- Spacer for centering -->
+</header>
+<main class="pt-24 px-6 max-w-2xl mx-auto space-y-12 pb-24">
+<!-- Step 1: Search -->
+<section class="space-y-6" id="step-search">
+<div class="space-y-2">
+<h2 class="font-headline font-extrabold text-2xl text-primary">Which pill are you adding?</h2>
+<p class="font-body text-on-surface-variant">Search our database or type a custom name.</p>
+</div>
+<div class="relative">
+<div class="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline text-2xl">search</span>
+</div>
+<input class="w-full h-16 pl-14 pr-6 bg-surface-container-high border-2 border-transparent focus:border-primary-container rounded-2xl font-headline text-lg transition-all placeholder:text-outline" placeholder="e.g. Aspirin, Ibuprofen" type="text" value="Aspirin"/>
+<!-- Typeahead Suggestion Dropdown (Simulated) -->
+<div class="absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-surface-container-high z-10 overflow-hidden">
+<div class="p-2">
+<div class="flex items-center gap-4 p-4 hover:bg-surface-container-low rounded-xl cursor-pointer">
+<span class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">pill</span>
+</span>
+<div>
+<p class="font-headline font-bold text-on-surface">Aspirin</p>
+<p class="font-label text-xs text-outline">Common NSAID</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4 hover:bg-surface-container-low rounded-xl cursor-pointer">
+<span class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-outline text-xl">pill</span>
+</span>
+<div>
+<p class="font-headline font-bold text-on-surface">Aspirin Complex</p>
+<p class="font-label text-xs text-outline">Cold &amp; Flu</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Selected Pill Context & Info -->
+<div class="bg-primary/5 rounded-[2rem] p-6 border border-primary/10 space-y-4">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary text-2xl" style="font-variation-settings: 'FILL' 1">pill</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-xl text-on-surface">Aspirin</h3>
+<p class="font-label text-[10px] uppercase tracking-widest text-primary font-bold">In Progress</p>
+</div>
+</div>
+</div>
+<!-- Contextual Info Cards -->
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-white/60 p-4 rounded-2xl border border-white flex gap-3">
+<span class="material-symbols-outlined text-secondary text-xl shrink-0" style="font-variation-settings: 'FILL' 1">restaurant</span>
+<p class="font-body text-[11px] leading-tight text-on-surface-variant"><span class="font-bold text-on-surface">Food:</span> Take with food to avoid irritation.</p>
+</div>
+<div class="bg-white/60 p-4 rounded-2xl border border-white flex gap-3">
+<span class="material-symbols-outlined text-tertiary text-xl shrink-0" style="font-variation-settings: 'FILL' 1">info</span>
+<p class="font-body text-[11px] leading-tight text-on-surface-variant"><span class="font-bold text-on-surface">Use:</span> Reduces pain, fever, or inflammation.</p>
+</div>
+</div>
+</div>
+<!-- Step 2: Dosage -->
+<section class="space-y-8 step-active" id="step-dosage">
+<div class="space-y-6">
+<div class="flex items-center gap-3">
+<span class="w-8 h-8 rounded-full bg-primary text-white font-headline font-bold flex items-center justify-center text-sm">2</span>
+<h2 class="font-headline font-bold text-xl text-on-surface">Dosage</h2>
+</div>
+<div class="space-y-4">
+<label class="font-headline font-semibold text-on-surface px-1 block">How much do you take?</label>
+<div class="relative">
+<input class="w-full h-16 px-6 bg-surface-container-high border-none rounded-2xl font-headline font-bold text-xl focus:ring-2 focus:ring-primary" type="text" value="81 mg"/>
+<div class="absolute right-4 inset-y-0 flex items-center text-outline font-body font-semibold">
+                        mg
+                    </div>
+</div>
+</div>
+</div>
+</section>
+<!-- Step 3: Schedule (Expanded) -->
+<section class="space-y-8" id="step-schedule">
+<div class="space-y-6">
+<div class="flex items-center gap-3">
+<span class="w-8 h-8 rounded-full bg-primary text-white font-headline font-bold flex items-center justify-center text-sm">3</span>
+<h2 class="font-headline font-bold text-xl text-on-surface">Schedule</h2>
+</div>
+<div class="space-y-4">
+<label class="font-headline font-semibold text-on-surface px-1 block">Frequency</label>
+<div class="flex p-1.5 bg-surface-container-high rounded-2xl">
+<button class="flex-1 h-14 rounded-xl text-on-surface-variant font-headline font-bold text-sm transition-all">Every day</button>
+<button class="flex-1 h-14 rounded-xl bg-primary text-white font-headline font-bold text-sm shadow-md transition-all">Specific days</button>
+<button class="flex-1 h-14 rounded-xl text-on-surface-variant font-headline font-bold text-sm transition-all">As needed</button>
+</div>
+</div>
+<!-- Days Selector (Visible when 'Specific days' is selected) -->
+<div class="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+<label class="font-headline font-semibold text-on-surface px-1 block">Select Days</label>
+<div class="grid grid-cols-7 gap-2">
+<button class="h-14 w-full rounded-xl bg-primary text-white font-headline font-bold flex items-center justify-center text-sm ring-2 ring-primary ring-offset-2">M</button>
+<button class="h-14 w-full rounded-xl bg-surface-container-high text-on-surface font-headline font-bold flex items-center justify-center text-sm border-2 border-transparent">T</button>
+<button class="h-14 w-full rounded-xl bg-primary text-white font-headline font-bold flex items-center justify-center text-sm ring-2 ring-primary ring-offset-2">W</button>
+<button class="h-14 w-full rounded-xl bg-surface-container-high text-on-surface font-headline font-bold flex items-center justify-center text-sm border-2 border-transparent">Th</button>
+<button class="h-14 w-full rounded-xl bg-primary text-white font-headline font-bold flex items-center justify-center text-sm ring-2 ring-primary ring-offset-2">F</button>
+<button class="h-14 w-full rounded-xl bg-surface-container-high text-on-surface font-headline font-bold flex items-center justify-center text-sm border-2 border-transparent">S</button>
+<button class="h-14 w-full rounded-xl bg-surface-container-high text-on-surface font-headline font-bold flex items-center justify-center text-sm border-2 border-transparent">Su</button>
+</div>
+</div>
+<div class="space-y-4">
+<label class="font-headline font-semibold text-on-surface px-1 block">Reminder Times</label>
+<div class="grid grid-cols-3 gap-3">
+<button class="flex flex-col items-center justify-center h-24 rounded-2xl bg-primary text-white transition-all shadow-lg ring-4 ring-primary-container/20">
+<span class="material-symbols-outlined text-2xl mb-1">wb_sunny</span>
+<span class="font-headline font-bold text-xs">Morning</span>
+<span class="font-label text-[10px] opacity-80">08:00 AM</span>
+</button>
+<button class="flex flex-col items-center justify-center h-24 rounded-2xl bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined text-2xl mb-1">light_mode</span>
+<span class="font-headline font-bold text-xs">Noon</span>
+<span class="font-label text-[10px]">12:00 PM</span>
+</button>
+<button class="flex flex-col items-center justify-center h-24 rounded-2xl bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined text-2xl mb-1">bedtime</span>
+<span class="font-headline font-bold text-xs">Night</span>
+<span class="font-label text-[10px]">09:00 PM</span>
+</button>
+</div>
+<button class="w-full h-14 flex items-center justify-center gap-2 border-2 border-dashed border-outline-variant rounded-2xl text-on-surface-variant hover:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">add_circle</span>
+<span class="font-headline font-bold text-sm">Add custom time</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Step 4: Appearance (Moved to final step) -->
+<section class="space-y-8" id="step-appearance">
+<div class="space-y-6">
+<div class="flex items-center gap-3">
+<span class="w-8 h-8 rounded-full bg-primary text-white font-headline font-bold flex items-center justify-center text-sm">4</span>
+<h2 class="font-headline font-bold text-xl text-on-surface">Pill Color</h2>
+</div>
+<div class="space-y-4">
+<label class="font-headline font-semibold text-on-surface px-1 block">Visual Identity</label>
+<div class="flex gap-4 overflow-x-auto no-scrollbar py-6 px-4 -mx-4">
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="relative w-12 h-12 rounded-full bg-white border border-outline-variant flex items-center justify-center">
+<div class="absolute inset-[-6px] rounded-full border-2 border-primary"></div>
+<span class="sr-only">White</span>
+</button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-red-400"></button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-blue-400"></button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-yellow-400"></button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-emerald-400"></button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-purple-400"></button>
+</div>
+<div class="shrink-0 p-1 flex items-center justify-center">
+<button class="w-12 h-12 rounded-full bg-orange-400"></button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Fixed Footer Action -->
+<div class="fixed bottom-0 left-0 w-full p-6 bg-white/90 backdrop-blur-md border-t border-surface-container-high z-50">
+<div class="max-w-2xl mx-auto">
+<button class="w-full h-16 rounded-2xl bg-primary text-white font-headline font-bold text-lg shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-3">
+<span class="material-symbols-outlined">add_circle</span>
+            Add to My Stack
+        </button>
+</div>
+</div>
+</body></html>
