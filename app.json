@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "HalfLifeControl",
+    "slug": "halflifecontrol",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "halflifecontrol",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#004d64"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.halflifecontrol.app"
+    },
+    "android": {
+      "package": "com.halflifecontrol.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#004d64",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      ["expo-router", { "root": "./src/app" }],
+      "expo-font"
+    ]
+  }
+}
