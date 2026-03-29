@@ -17,4 +17,7 @@ export {
   updateDoseStatus,
   fetchActiveDoses,
   subscribeActiveDoses,
+  fetchDoseHistory,
+  fetchDosesByDateRange,
 } from './pills';
+export type { DoseHistoryPage } from './pills';

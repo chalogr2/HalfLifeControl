@@ -11,10 +11,13 @@ import {
   query,
   where,
   orderBy,
+  limit as firestoreLimit,
+  startAfter,
   serverTimestamp,
   Timestamp,
   onSnapshot,
   type Unsubscribe,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from './config';
 import { eliminationDate } from '@/core/halflife';
@@ -170,4 +173,58 @@ function toDose(id: string, data: Record<string, any>): Dose {
     source: data.source ?? 'manual',
     createdAt: toDate(data.createdAt),
   };
+}
+
+// ─── History Queries ─────────────────────────────────
+
+export interface DoseHistoryPage {
+  doses: Dose[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+}
+
+/** Fetch dose history (all statuses), paginated, newest first. */
+export async function fetchDoseHistory(
+  userId: string,
+  pageSize: number = 50,
+  afterDoc?: QueryDocumentSnapshot | null,
+): Promise<DoseHistoryPage> {
+  let q = query(
+    dosesRef(userId),
+    orderBy('takenAt', 'desc'),
+    firestoreLimit(pageSize + 1),
+  );
+  if (afterDoc) {
+    q = query(
+      dosesRef(userId),
+      orderBy('takenAt', 'desc'),
+      startAfter(afterDoc),
+      firestoreLimit(pageSize + 1),
+    );
+  }
+  const snap = await getDocs(q);
+  const hasMore = snap.docs.length > pageSize;
+  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+  return {
+    doses: docs.map((d) => toDose(d.id, d.data())),
+    lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+    hasMore,
+  };
+}
+
+/** Fetch all doses for a specific date range (inclusive). */
+export async function fetchDosesByDateRange(
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<Dose[]> {
+  const snap = await getDocs(
+    query(
+      dosesRef(userId),
+      where('takenAt', '>=', Timestamp.fromDate(startDate)),
+      where('takenAt', '<=', Timestamp.fromDate(endDate)),
+      orderBy('takenAt', 'asc'),
+    ),
+  );
+  return snap.docs.map((d) => toDose(d.id, d.data()));
 }

@@ -1,18 +1,186 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, SectionList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Typography } from '@/components/ui';
-import { colors, spacing } from '@/theme';
+import { useRouter } from 'expo-router';
+import { Typography, Card } from '@/components/ui';
+import { colors, spacing, borderRadius } from '@/theme';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { fetchDoseHistory } from '@/services/firebase/pills';
+import type { Dose } from '@/core/types';
+
+interface DayGroup {
+  dateKey: string;
+  label: string;
+  doses: Dose[];
+  pillsTaken: number;
+  uniquePills: number;
+}
+
+function formatDayLabel(date: Date): string {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+}
+
+function getDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function isToday(dateKey: string): boolean {
+  return dateKey === getDateKey(new Date());
+}
 
 export default function HistoryScreen() {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const [allDoses, setAllDoses] = useState<Dose[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const page = await fetchDoseHistory(user.uid, 200);
+        if (!cancelled) setAllDoses(page.doses);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+
+  const dayGroups = useMemo<DayGroup[]>(() => {
+    const groups = new Map<string, Dose[]>();
+    for (const dose of allDoses) {
+      const key = getDateKey(dose.takenAt);
+      const existing = groups.get(key) ?? [];
+      existing.push(dose);
+      groups.set(key, existing);
+    }
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([dateKey, doses]) => {
+        const uniquePills = new Set(doses.map((d) => d.pillId)).size;
+        return {
+          dateKey,
+          label: formatDayLabel(doses[0].takenAt),
+          doses,
+          pillsTaken: doses.length,
+          uniquePills,
+        };
+      });
+  }, [allDoses]);
+
+  // Adherence = days with at least 1 dose / total days in range
+  const adherencePercent = useMemo(() => {
+    if (dayGroups.length === 0) return 0;
+    const totalDays = dayGroups.length;
+    const daysWithDoses = dayGroups.filter((g) => g.pillsTaken > 0).length;
+    return Math.round((daysWithDoses / totalDays) * 100);
+  }, [dayGroups]);
+
+  const sections = useMemo(
+    () => dayGroups.map((g) => ({ title: g.label, dateKey: g.dateKey, data: [g] })),
+    [dayGroups],
+  );
+
+  const handleDayPress = useCallback(
+    (dateKey: string) => {
+      router.push(`/(main)/history/${dateKey}`);
+    },
+    [router],
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Typography variant="headlineMd">History</Typography>
-        <Typography variant="bodyLg" color="onSurfaceVariant" style={styles.subtitle}>
-          Your dose history will appear here once you start tracking.
-        </Typography>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.dateKey}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Typography variant="headlineMd">History</Typography>
+
+            {/* Adherence summary */}
+            {dayGroups.length > 0 && (
+              <View style={styles.adherenceCard}>
+                <Typography variant="bodyMd" color="onSurfaceVariant">
+                  OVERALL ADHERENCE
+                </Typography>
+                <View style={styles.adherenceRow}>
+                  <Typography variant="displayMd" color="primary">
+                    {adherencePercent}%
+                  </Typography>
+                  <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.adherenceLabel}>
+                    {'\n'}Based on your {dayGroups.length} tracked day{dayGroups.length !== 1 ? 's' : ''}.{'\n'}
+                    You're doing great!
+                  </Typography>
+                </View>
+              </View>
+            )}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Typography variant="headlineSm" align="center" color="onSurfaceVariant">
+              No history yet
+            </Typography>
+            <Typography variant="bodyLg" align="center" color="outline">
+              Your dose history will appear here once you start tracking.
+            </Typography>
+          </View>
+        }
+        renderSectionHeader={() => null}
+        renderItem={({ item }) => (
+          <Pressable
+            onPress={() => handleDayPress(item.dateKey)}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Card variant="elevated" style={styles.dayCard}>
+              <View style={styles.dayHeader}>
+                <Typography variant="titleMd">
+                  {isToday(item.dateKey) ? 'Today' : item.label}
+                </Typography>
+              </View>
+              <View style={styles.dayStats}>
+                <View style={styles.stat}>
+                  <Typography variant="headlineSm" color="primary">
+                    {item.pillsTaken}
+                  </Typography>
+                  <Typography variant="labelMd" color="onSurfaceVariant">
+                    pills taken
+                  </Typography>
+                </View>
+                <View style={styles.stat}>
+                  <Typography variant="headlineSm" color="secondary">
+                    {item.uniquePills}
+                  </Typography>
+                  <Typography variant="labelMd" color="onSurfaceVariant">
+                    medications
+                  </Typography>
+                </View>
+              </View>
+            </Card>
+          </Pressable>
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
     </SafeAreaView>
   );
 }
@@ -22,13 +190,58 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
-  content: {
+  loadingContainer: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  list: {
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[4],
+    paddingBottom: spacing[24],
+  },
+  header: {
+    paddingTop: spacing[2],
+    paddingBottom: spacing[4],
+    gap: spacing[4],
+  },
+  adherenceCard: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: borderRadius.xl,
+    padding: spacing[5],
+    gap: spacing[2],
+  },
+  adherenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+  },
+  adherenceLabel: {
+    flex: 1,
+  },
+  dayCard: {
     gap: spacing[3],
   },
-  subtitle: {
-    maxWidth: 280,
+  dayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dayStats: {
+    flexDirection: 'row',
+    gap: spacing[8],
+  },
+  stat: {
+    gap: spacing[1],
+  },
+  separator: {
+    height: spacing[3],
+  },
+  empty: {
+    paddingVertical: spacing[16],
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  pressed: {
+    opacity: 0.85,
   },
 });

@@ -8,6 +8,7 @@ import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { nextScheduledDose } from '@/core/scheduling';
+import { scheduleAllPillReminders, setNotificationResponseHandler } from '@/services/notifications';
 import type { Pill, Dose } from '@/core/types';
 
 interface Section {
@@ -26,6 +27,24 @@ export default function DashboardScreen() {
       return () => unsubscribe();
     }
   }, [user?.uid]);
+
+  // Schedule notifications when pills change
+  useEffect(() => {
+    if (pills.length > 0) {
+      scheduleAllPillReminders(pills);
+    }
+  }, [pills]);
+
+  // Handle notification taps — record dose for the tapped pill
+  useEffect(() => {
+    const cleanup = setNotificationResponseHandler((pillId) => {
+      const pill = pills.find((p) => p.id === pillId);
+      if (pill && user) {
+        handleTakePill(pill);
+      }
+    });
+    return cleanup;
+  }, [pills, user]);
 
   const scheduledPills = useMemo(() => pills.filter((p) => p.pillType === 'scheduled'), [pills]);
   const randomPills = useMemo(() => pills.filter((p) => p.pillType === 'random'), [pills]);

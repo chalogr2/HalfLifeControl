@@ -530,21 +530,98 @@ Ran `npx tsc --noEmit` — **0 errors**.
 
 ---
 
+## Phase 4: Notifications + History — COMPLETED
+
+### Step 1: Dose History Queries (`src/services/firebase/pills.ts`)
+
+**What**: Added paginated history and date-range queries.
+
+- `fetchDoseHistory(userId, pageSize, afterDoc)` — paginated, all statuses, newest first. Returns `{ doses, lastDoc, hasMore }` for infinite scroll.
+- `fetchDosesByDateRange(userId, startDate, endDate)` — all doses within a date range, ordered by `takenAt` ascending.
+- Uses `startAfter` cursor for Firestore pagination, fetches `pageSize + 1` to detect if there are more pages.
+
+### Step 2: History List Screen (`src/app/(main)/(tabs)/history.tsx`)
+
+**What**: Rebuilt to match `refined_history_list_screen/` Stitch mockup.
+
+- **Overall adherence card** at top: calculates days-with-doses / total-tracked-days as percentage
+- **Day cards**: each card shows date, pills taken count, unique medications count
+- **SectionList** grouped by day, newest first
+- "Today" label for the current date
+- Tapping a day navigates to `/(main)/history/[date]` (day detail)
+- Empty state: "No history yet"
+- Loads last 200 doses on mount
+
+### Step 3: Day Detail Screen (`src/app/(main)/history/[date].tsx`)
+
+**What**: Rebuilt to match `refined_day_detail_view_screen/` Stitch mockup.
+
+- **Daily Completion ring**: percentage of scheduled pills taken that day
+- **Time-of-day grouping**: Morning (<12), Afternoon (12–17), Evening (≥17)
+- Each dose shows colored dot (pill accent color), drug name, time taken
+- **Consistency badge**: "Great Consistency!" when 100% completion
+- Back button to return to history list
+- Dynamic route: `[date].tsx` receives `YYYY-MM-DD` param
+
+### Step 4: Settings Screen Rebuild (`src/app/(main)/(tabs)/settings.tsx`)
+
+**What**: Rebuilt to match `final_settings_screen_with_large_legal_buttons/` Stitch mockup.
+
+- **Reminder preferences**: 3 radio-style cards:
+  1. "Automatically start countdown at scheduled time"
+  2. "Prompt to answer if pill was taken"
+  3. "Simple notification only"
+- Radio buttons with primary-colored inner dot when selected
+- Active card gets 2px primary border
+- **Legal links**: Terms of Service, Privacy Policy (tonal background buttons)
+- **Account info**: shows signed-in email
+- **Sign out**: error-container button with confirmation alert
+
+### Step 5: Local Notifications (`src/services/notifications/index.ts`)
+
+**What**: expo-notifications integration for pill reminders.
+
+- `requestNotificationPermissions()` — requests permission, returns boolean
+- `schedulePillReminder(pill)` — schedules daily or weekly notifications based on `PillSchedule`
+  - Daily: `DAILY` trigger at `timeOfDay`
+  - Specific days: one `WEEKLY` trigger per day of the week
+  - Cancels existing reminders for the pill first (prevents duplicates)
+- `cancelPillReminders(pillId)` — cancels all scheduled notifications for a specific pill
+- `cancelAllReminders()` — nuclear option
+- `scheduleAllPillReminders(pills)` — batch schedule for all active scheduled pills
+- `setNotificationResponseHandler(handler)` — registers listener for notification taps, returns cleanup function
+
+**Notification content**: "Time for your medication" title, drug name + dosage body, pillId in data.
+
+### Step 6: Dashboard Notification Integration
+
+- Added `scheduleAllPillReminders(pills)` effect — re-schedules when pills list changes
+- Added `setNotificationResponseHandler` — tapping a notification triggers "took pill" flow for that pill
+- Both effects clean up on unmount
+
+### Step 7: App Config Update
+
+Added `expo-notifications` plugin to `app.json` with icon and primary color for Android notification channel.
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**.
+
+---
+
 ## What Needs To Happen Next
-
-### Phase 4: Notifications + History
-Build in this order:
-
-1. **Dose history screen** — FlatList of past doses grouped by day, matching `refined_history_list_screen/` and `refined_day_detail_view_screen/` mockups
-2. **Local notifications** (expo-notifications) — schedule reminders for daily pills
-3. **Settings screen** — notification preferences, reminder time offsets
-4. **Firestore indexes** — composite indexes for dose queries (status + takenAt)
-5. **Offline persistence** — investigate Firebase JS SDK offline mode vs migration prep
 
 ### Phase 5: Subscription + Paywall
 1. **RevenueCat integration** — offerings, paywall screen matching `finalized_go_pro_screen/`
 2. **Free tier gate** — limit to 1 scheduled pill, unlimited one-time tracking
 3. **Pro tier** — unlimited scheduled pills, priority notifications
+
+### Phase 6: Social Auth + Native Firebase Migration
+1. **Google Sign-In** + **Apple Sign-In** (enable disabled buttons)
+2. **@react-native-firebase** migration for FCM push notifications
+3. **Firestore offline persistence** via native SDK
+
+### Phase 7: iOS Build + Store Submission
 
 ### Design Reference Reminder
 All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_html/`. Each folder contains:
@@ -553,23 +630,25 @@ All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_h
 
 The design system documentation is in `docs/stitch_halflifecontrol_html/vitality_clear/DESIGN.md`.
 
-### Key Patterns Established in Phase 1, 2 & 3
+### Key Patterns Established in Phase 1–4
 - **Import paths**: Always use `@/` alias (e.g., `import { colors } from '@/theme'`)
 - **Styling**: Use `StyleSheet.create()` with theme tokens, never hardcode colors/sizes
 - **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`; pill components from `@/components/pills`
 - **State**: Use Zustand stores in `src/stores/`
 - **Firebase**: Use service functions from `src/services/firebase/`, never import Firebase directly in screens
-- **Navigation**: Expo Router file-based routing — `(tabs)` for tab screens, `pill/` as modal Stack
+- **Navigation**: Expo Router file-based routing — `(tabs)` for tab screens, `pill/` and `history/` as Stack overlays
 - **Auth gating**: Handled automatically by root `_layout.tsx` — no need to check auth in individual screens
 - **Pure core logic**: `src/core/` has zero React/Firebase imports — pure TypeScript math and scheduling
 - **Real-time subscriptions**: Use Firestore `onSnapshot` listeners in stores, clean up on unmount
 - **Countdown pattern**: Calculate from absolute timestamps on each tick — no drift, instant catch-up on foreground
 - **Drug search**: 3-tier: curated DB (instant) → openFDA (async fallback) → manual entry (always available)
 - **Modal screens**: Use `presentation: 'modal'` in Stack.Screen options for overlay screens like add pill
+- **Dynamic routes**: Use `[param].tsx` for dynamic segments (e.g., `[date].tsx` for day detail)
+- **Notifications**: Use `src/services/notifications/` — schedule in dashboard effect, handle taps via response handler
 
 ---
 
-## File Inventory (Phase 3 Complete)
+## File Inventory (Phase 4 Complete)
 
 ```
 src/
@@ -585,12 +664,15 @@ src/
 │   │   ├── _layout.tsx                # Stack nav, no header
 │   │   └── welcome.tsx                # Welcome screen (two CTAs, login link)
 │   └── (main)/
-│       ├── _layout.tsx                # Stack: (tabs) + pill/ modal
+│       ├── _layout.tsx                # Stack: (tabs) + pill/ modal + history/
 │       ├── (tabs)/
 │       │   ├── _layout.tsx            # Tab navigator (Dashboard, History, Settings)
-│       │   ├── dashboard.tsx          # SectionList dashboard, FAB, avatar, pill tracking
-│       │   ├── history.tsx            # Dose history placeholder
-│       │   └── settings.tsx           # Account, legal, sign out
+│       │   ├── dashboard.tsx          # SectionList dashboard, FAB, avatar, notifications
+│       │   ├── history.tsx            # Dose history list with adherence %
+│       │   └── settings.tsx           # Reminder prefs, legal, sign out
+│       ├── history/
+│       │   ├── _layout.tsx            # Stack nav, no header
+│       │   └── [date].tsx             # Day detail: completion ring, time groups, badge
 │       └── pill/
 │           ├── _layout.tsx            # Stack nav, no header
 │           └── add.tsx                # Add medication: search + dosage + schedule + color + success modal
@@ -618,10 +700,12 @@ src/
 │   └── useCountdown.ts                # Real-time countdown hook (1s interval, AppState aware)
 ├── services/
 │   ├── firebase/
-│   │   ├── index.ts                   # Barrel export (auth + pills)
+│   │   ├── index.ts                   # Barrel export (auth + pills + history)
 │   │   ├── config.ts                  # Firebase app/auth/db initialization
 │   │   ├── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
-│   │   └── pills.ts                   # Pill/dose Firestore CRUD + real-time subscriptions
+│   │   └── pills.ts                   # Pill/dose CRUD + real-time subs + history queries
+│   ├── notifications/
+│   │   └── index.ts                   # expo-notifications: schedule, cancel, handle responses
 │   └── openfda/
 │       └── index.ts                   # openFDA Drug Label API client with caching
 ├── stores/
@@ -655,7 +739,7 @@ Root config files:
 └── .env.example                       # Template for required env vars
 ```
 
-## Dependencies Installed (Phase 1)
+## Dependencies Installed (through Phase 4)
 
 ```json
 {
@@ -677,6 +761,7 @@ Root config files:
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-svg": "^15.15.4",
+    "expo-notifications": "~0.35.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },

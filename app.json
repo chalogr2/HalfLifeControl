@@ -31,7 +31,14 @@
     },
     "plugins": [
       ["expo-router", { "root": "./src/app" }],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#004d64"
+        }
+      ]
     ]
   }
 }
