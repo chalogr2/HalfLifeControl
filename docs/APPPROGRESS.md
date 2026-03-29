@@ -307,41 +307,132 @@ src/app/
 
 ---
 
+## Phase 2: Core Pill Tracking — COMPLETED
+
+### Step 1: Core Half-Life Math (`src/core/halflife.ts`)
+
+**What**: Pure TypeScript functions for all decay math — no React, no Firebase. Extractable for watch apps.
+
+**Functions**:
+- `concentration(elapsedMinutes, halfLifeMinutes)` → percentage remaining (0–100)
+- `eliminationMinutes(halfLifeMinutes)` → 5 × halfLife (time to ~97% elimination)
+- `eliminationDate(takenAt, halfLifeMinutes)` → absolute Date of elimination
+- `minutesRemaining(takenAt, halfLifeMinutes, now)` → minutes until elimination, clamped ≥ 0
+- `eliminationProgress(takenAt, halfLifeMinutes, now)` → 0→1 progress (0 = just taken, 1 = eliminated)
+- `formatTimeRemaining(minutes)` → human string like "4h 23m" or "Eliminated"
+
+### Step 2: Scheduling Logic (`src/core/scheduling.ts`)
+
+**What**: Pure scheduling functions for computing next dose times.
+
+**Functions**:
+- `nextScheduledDose(schedule, now)` → next Date for a PillSchedule (handles daily, specific_days, every_n_days)
+- `describeSchedule(schedule)` → human-readable string like "Daily at 08:00" or "Mon, Wed, Fri at 09:00"
+
+### Step 3: Firestore CRUD for Pills & Doses (`src/services/firebase/pills.ts`)
+
+**What**: Full Firestore subcollection CRUD under `users/{userId}/pills` and `users/{userId}/doses`.
+
+**Pills**: `addPill`, `updatePill`, `deletePill`, `fetchPills`, `subscribePills` (real-time listener)
+**Doses**: `recordDose` (precomputes `eliminationAt`), `updateDoseStatus`, `fetchActiveDoses`, `subscribeActiveDoses` (real-time, filtered by `status == 'active'`)
+
+- All functions use `serverTimestamp()` for `createdAt`/`updatedAt`
+- `toPill()` and `toDose()` helpers handle Firestore Timestamp → Date conversion
+- `subscribePills` and `subscribeActiveDoses` return Firestore `Unsubscribe` functions
+
+### Step 4: Pill Store (`src/stores/usePillStore.ts`)
+
+**What**: Zustand store wrapping Firestore CRUD with real-time subscriptions.
+
+**State**: `pills`, `activeDoses`, `isLoading`
+**Actions**: `subscribe(userId)`, `unsubscribe()`, `addPill`, `updatePill`, `deletePill`, `recordDose`, `dismissDose`
+
+- `subscribe()` sets up both `subscribePills` and `subscribeActiveDoses` listeners
+- `unsubscribe()` cleans up listeners and resets state
+- Store keeps module-level `unsubs` array for cleanup
+
+### Step 5: Countdown Hook (`src/hooks/useCountdown.ts`)
+
+**What**: React hook that recomputes half-life countdown every second.
+
+**Returns**: `{ concentration, minutesRemaining, progress, timeLabel, isEliminated }`
+
+- Uses 1-second `setInterval` while foregrounded
+- Listens to `AppState` changes — recomputes instantly on foreground resume (no drift)
+- All state derived from pure `halflife.ts` math functions on each tick
+
+### Step 6: Pill Components
+
+**`ProgressRing.tsx`**: SVG circular progress ring using `react-native-svg`.
+- Shows depleting arc (progress 0→1 maps from full ring to empty)
+- Center label shows time remaining
+- Customizable size, stroke width, and color
+
+**`CountdownTimer.tsx`**: Combines `useCountdown` hook + `ProgressRing` + concentration % text.
+- Shows "Eliminated" label when countdown completes
+
+**`PillCard.tsx`**: Card for displaying a pill in the dashboard.
+- Uses `Card` variant `scheduled` (solid left accent) or `random` (dashed border)
+- Shows pill name, dosage, schedule description
+- Shows `CountdownTimer` if there's an active dose, or "Next: 8:30 AM" label if not
+
+**Barrel export**: `src/components/pills/index.ts`
+
+### Step 7: Pill Color Palette (`src/core/pillColors.ts`)
+
+**What**: 10 predefined accent colors for pill visual identification.
+- `PILL_COLORS` array from the M3 tonal palette
+- `getDefaultPillColor(index)` cycles through colors
+
+### Step 8: Add Medication Screen (`src/app/(main)/pill/add.tsx`)
+
+**What**: Full add-pill form with:
+- Pill type toggle: "Scheduled" vs "One-time"
+- Drug name input (manual for Phase 2; drug search added in Phase 3)
+- Dosage + unit inputs
+- Half-life input with hours/minutes toggle
+- Schedule section (visible only for scheduled pills): time of day, frequency selector (daily / specific days / every N days), day-of-week picker, interval input
+- Color picker: 10 predefined colors
+- Save button: creates pill via `usePillStore.addPill()`, navigates back
+
+**Route**: `/(main)/pill/add` with its own `_layout.tsx` (Stack, no header)
+
+### Step 9: Dashboard Rebuild (`src/app/(main)/dashboard.tsx`)
+
+**What**: Replaced placeholder with fully functional dashboard.
+
+**Features**:
+- Subscribes to pills + active doses via `usePillStore.subscribe(userId)` with cleanup
+- Splits pills into `scheduledPills` and `randomPills` using `useMemo`
+- `FlatList` renders `PillCard` for each pill with active dose and next-dose label
+- Tapping a pill with no active dose → Alert "Took it?" → calls `recordDose()`
+- Floating Action Button (64px, bottom-right) → navigates to `/(main)/pill/add`
+- Empty state: "No medications yet" with instructions
+
+### Step 10: Dependency Added
+
+- `react-native-svg` — installed via `npx expo install react-native-svg` for the ProgressRing SVG component
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**. One fix applied: `selectedColor` state needed explicit `string` type annotation to avoid narrowing to a union literal from `PILL_COLORS[0]`.
+
+---
+
 ## What Needs To Happen Next
 
-### Phase 2: Core Pill Tracking
+### Phase 3: Drug Search + Onboarding
 Build in this order:
 
-1. **`src/core/halflife.ts`** — Pure math functions:
-   - `calculateConcentration(takenAt, halfLifeMinutes, now)` → percentage remaining
-   - `getEliminationTime(takenAt, halfLifeMinutes)` → Date when ~97% eliminated (5 half-lives)
-   - Add unit tests
-
-2. **`src/core/scheduling.ts`** — Schedule logic:
-   - `getNextDoseTime(schedule, now)` → next Date based on frequency/days
-   - Add unit tests
-
-3. **`src/stores/usePillStore.ts`** — Zustand store:
-   - Pill CRUD (add, update, remove)
-   - Dose CRUD (record dose, dismiss, complete)
-   - Firestore sync (read/write to `users/{uid}/pills` and `users/{uid}/doses`)
-
-4. **`src/hooks/useCountdown.ts`** — Real-time countdown hook:
-   - 1-second setInterval while foregrounded
-   - Uses `calculateConcentration()` on each tick
-   - Returns `{ concentration, timeRemaining, isEliminated }`
-
-5. **`src/components/pills/ProgressRing.tsx`** — SVG countdown ring:
-   - 12px stroke, circular arc depletes based on concentration %
-   - Center text shows remaining time
-
-6. **`src/components/pills/PillCard.tsx`** — Pill display card:
-   - Uses `Card` variant `scheduled` or `random`
-   - Shows pill name, dosage, countdown ring or next dose time
-
-7. **Dashboard screen** — Replace placeholder with real pill lists
-
-8. **Add medication flow** — Match `docs/stitch_halflifecontrol_html/fixed_add_medication_flow/`
+1. **openFDA client** (`src/services/openfda/`) — API client with caching, type-safe response parsing
+2. **Curated half-life JSON** — Start with top 50 drugs, expand to 200. Shipped with the app.
+3. **`DrugSearchBar` component** — Typeahead search across openFDA + curated DB + manual fallback
+4. **Full onboarding flow**:
+   - `welcome.tsx` → rebuilt with proper routing
+   - Drug search screen → add pills during onboarding
+   - Schedule editor screen
+   - Paywall gate (adding 2nd scheduled pill)
+5. **Navigation guards** — auth → onboarding → main flow fully wired
 
 ### Design Reference Reminder
 All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_html/`. Each folder contains:
@@ -350,18 +441,21 @@ All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_h
 
 The design system documentation is in `docs/stitch_halflifecontrol_html/vitality_clear/DESIGN.md`.
 
-### Key Patterns Established in Phase 1
+### Key Patterns Established in Phase 1 & 2
 - **Import paths**: Always use `@/` alias (e.g., `import { colors } from '@/theme'`)
 - **Styling**: Use `StyleSheet.create()` with theme tokens, never hardcode colors/sizes
-- **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`
+- **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`; pill components from `@/components/pills`
 - **State**: Use Zustand stores in `src/stores/`
 - **Firebase**: Use service functions from `src/services/firebase/`, never import Firebase directly in screens
 - **Navigation**: Expo Router file-based routing — create a file in the right directory, it becomes a route
 - **Auth gating**: Handled automatically by root `_layout.tsx` — no need to check auth in individual screens
+- **Pure core logic**: `src/core/` has zero React/Firebase imports — pure TypeScript math and scheduling
+- **Real-time subscriptions**: Use Firestore `onSnapshot` listeners in stores, clean up on unmount
+- **Countdown pattern**: Calculate from absolute timestamps on each tick — no drift, instant catch-up on foreground
 
 ---
 
-## File Inventory (Phase 1 Complete)
+## File Inventory (Phase 2 Complete)
 
 ```
 src/
@@ -378,23 +472,38 @@ src/
 │   │   └── welcome.tsx                # "Do you take pills?" screen (placeholder)
 │   └── (main)/
 │       ├── _layout.tsx                # Stack nav, no header
-│       └── dashboard.tsx              # Dashboard (placeholder — built in Phase 2)
+│       ├── dashboard.tsx              # Dashboard with pill list, FAB, dose tracking
+│       └── pill/
+│           ├── _layout.tsx            # Stack nav, no header
+│           └── add.tsx                # Add medication form (manual entry)
 ├── components/
-│   └── ui/
+│   ├── ui/
+│   │   ├── index.ts                   # Barrel export
+│   │   ├── Typography.tsx             # Text with variant/color props
+│   │   ├── Button.tsx                 # Primary/secondary/outline/ghost button
+│   │   ├── Card.tsx                   # Elevated/outlined/scheduled/random card
+│   │   └── Input.tsx                  # Filled input with focus/error states
+│   └── pills/
 │       ├── index.ts                   # Barrel export
-│       ├── Typography.tsx             # Text with variant/color props
-│       ├── Button.tsx                 # Primary/secondary/outline/ghost button
-│       ├── Card.tsx                   # Elevated/outlined/scheduled/random card
-│       └── Input.tsx                  # Filled input with focus/error states
+│       ├── ProgressRing.tsx           # SVG circular countdown ring
+│       ├── CountdownTimer.tsx         # Ring + concentration % + time label
+│       └── PillCard.tsx               # Full pill card with countdown/next-dose
 ├── core/
-│   └── types.ts                       # Domain types (Pill, Dose, UserProfile, etc.)
+│   ├── types.ts                       # Domain types (Pill, Dose, UserProfile, etc.)
+│   ├── halflife.ts                    # Pure decay math (concentration, elimination, formatting)
+│   ├── scheduling.ts                  # Next dose calculation, schedule description
+│   └── pillColors.ts                  # 10 predefined accent colors for pills
+├── hooks/
+│   └── useCountdown.ts                # Real-time countdown hook (1s interval, AppState aware)
 ├── services/
 │   └── firebase/
-│       ├── index.ts                   # Barrel export
+│       ├── index.ts                   # Barrel export (auth + pills)
 │       ├── config.ts                  # Firebase app/auth/db initialization
-│       └── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
+│       ├── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
+│       └── pills.ts                   # Pill/dose Firestore CRUD + real-time subscriptions
 ├── stores/
-│   └── useAuthStore.ts                # Global auth state (Zustand)
+│   ├── useAuthStore.ts                # Global auth state (Zustand)
+│   └── usePillStore.ts               # Pills + doses state with Firestore sync (Zustand)
 └── theme/
     ├── index.ts                       # Barrel export
     ├── colors.ts                      # 40+ Material Design 3 color tokens
