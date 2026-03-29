@@ -419,20 +419,132 @@ Ran `npx tsc --noEmit` — **0 errors**. One fix applied: `selectedColor` state 
 
 ---
 
+## Phase 3: Drug Search + Onboarding — COMPLETED
+
+### Step 1: Curated Drug Database (`src/data/drugDatabase.ts`)
+
+**What**: 50 common drugs with half-life data, brand names, categories, and common dosages. Shipped with the app for instant offline typeahead.
+
+- Each entry: `{ id, name, brands[], halfLifeMinutes, halfLifeLabel, commonDosageMg, category }`
+- Categories: NSAID, Analgesic, ACE Inhibitor, Statin, SSRI, SNRI, Benzodiazepine, Antibiotic, PPI, Antihistamine, etc.
+- `searchDrugs(query)` function: case-insensitive search across name, brands, and id. Minimum 2 chars.
+
+### Step 2: openFDA API Client (`src/services/openfda/index.ts`)
+
+**What**: Fallback drug search via the openFDA Drug Label API.
+
+- Searches `openfda.generic_name` and `openfda.brand_name` fields
+- In-memory cache to avoid re-fetching the same query
+- 5-second timeout via AbortController
+- De-duplicates results by generic name
+- Returns `{ genericName, brandName }[]`
+- Silently returns empty on errors (no user-facing error for search fallback)
+
+### Step 3: DrugSearchBar Component (`src/components/pills/DrugSearchBar.tsx`)
+
+**What**: Typeahead search dropdown with 3-tier search strategy.
+
+**Search flow**:
+1. Curated DB searched instantly (≥2 chars) — results show "HL" badge
+2. openFDA searched asynchronously (≥3 chars, only if <3 curated results) — results show "(FDA)" label
+3. Manual entry always shown as last option — "Enter details manually"
+
+**UX**: 200ms debounce, dropdown with results, loading spinner during FDA search, select auto-fills drug name (and half-life/dosage from curated entries).
+
+### Step 4: Welcome Screen Rebuild (`src/app/(onboarding)/welcome.tsx`)
+
+**What**: Rebuilt to match `final_clean_welcome_screen/` Stitch mockup.
+
+- Brand name "HalfLifeControl" at top
+- Illustration placeholder (primaryContainer circle with pill emoji)
+- "Let's manage your medications together." headline
+- Subtitle: "Start by setting up your daily pill stack or tracking a single pill."
+- Two CTA cards with chevron arrows:
+  - "Yes, I take pills on a schedule" → navigates to `/(main)/pill/add?type=scheduled`
+  - "No, I just want to track a pill now" → navigates to `/(main)/pill/add?type=random`
+- "Already have an account? Log in" link at bottom
+
+### Step 5: Add Medication Flow Rebuild (`src/app/(main)/pill/add.tsx`)
+
+**What**: Rebuilt to match `fixed_add_medication_flow/` Stitch mockup.
+
+**Sections with numbered icons**:
+1. Drug Search — `DrugSearchBar` at top; selecting curated drug auto-fills half-life + dosage
+2. Dosage — amount + unit inputs
+3. Half-Life — shown only when `halfLifeSource === 'manual'` (hidden for curated drugs)
+4. Schedule — frequency toggles (Every day / Specific days / As needed), day picker, reminder time
+5. Pill Color — 10 accent color dots
+
+**Key changes from Phase 2**:
+- Replaced manual drug name input with `DrugSearchBar`
+- Added `?type=` query param support (from welcome screen)
+- "As needed" frequency maps to `pillType: 'random'`
+- Success modal on save: "Medication Added!" with checkmark icon + "Back to Dashboard" button
+- Fixed bottom CTA bar (sticky save button)
+
+### Step 6: Bottom Tab Navigation
+
+**What**: Restructured `(main)` from a flat Stack to Tabs + Stack.
+
+**New structure**: `(main)/_layout.tsx` is a Stack with:
+- `(tabs)` — Tab navigator (default screen)
+- `pill/` — Modal stack (add medication presented as modal overlay)
+
+**`(tabs)/_layout.tsx`**: Three tabs:
+- **Dashboard** — pill list, countdown timers, FAB
+- **History** — placeholder (dose history, Phase 4)
+- **Settings** — account info, legal links, sign out
+
+Tab bar: `surfaceContainerLow` background, no border (tonal separation), 64px height.
+
+### Step 7: Dashboard Rebuild (`src/app/(main)/(tabs)/dashboard.tsx`)
+
+**What**: Rebuilt to match `dashboard_with_balanced_timer_thickness/` Stitch mockup.
+
+**Changes**:
+- Switched from `FlatList` to `SectionList` with "My Daily Stack" and "One-Time Tracking" sections
+- Profile avatar circle (top-right, primary color, shows first initial)
+- "Add pill to stack" / "Track another pill" dashed-border links after each section
+- Section headers as sticky titles
+- FAB repositioned above tab bar
+
+### Step 8: Settings Screen (`src/app/(main)/(tabs)/settings.tsx`)
+
+**What**: Basic settings with account info, legal links, and sign out.
+
+- Shows current user email
+- Terms of Service and Privacy Policy links (navigation TBD)
+- Sign out button with confirmation alert (errorContainer background)
+
+### Step 9: History Screen (`src/app/(main)/(tabs)/history.tsx`)
+
+**What**: Placeholder screen — "Your dose history will appear here."
+
+### Step 10: Auth Gate Update
+
+Updated `_layout.tsx` auth gate redirect from `/(main)/dashboard` to `/(main)/(tabs)/dashboard` for the new tabs structure.
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**.
+
+---
+
 ## What Needs To Happen Next
 
-### Phase 3: Drug Search + Onboarding
+### Phase 4: Notifications + History
 Build in this order:
 
-1. **openFDA client** (`src/services/openfda/`) — API client with caching, type-safe response parsing
-2. **Curated half-life JSON** — Start with top 50 drugs, expand to 200. Shipped with the app.
-3. **`DrugSearchBar` component** — Typeahead search across openFDA + curated DB + manual fallback
-4. **Full onboarding flow**:
-   - `welcome.tsx` → rebuilt with proper routing
-   - Drug search screen → add pills during onboarding
-   - Schedule editor screen
-   - Paywall gate (adding 2nd scheduled pill)
-5. **Navigation guards** — auth → onboarding → main flow fully wired
+1. **Dose history screen** — FlatList of past doses grouped by day, matching `refined_history_list_screen/` and `refined_day_detail_view_screen/` mockups
+2. **Local notifications** (expo-notifications) — schedule reminders for daily pills
+3. **Settings screen** — notification preferences, reminder time offsets
+4. **Firestore indexes** — composite indexes for dose queries (status + takenAt)
+5. **Offline persistence** — investigate Firebase JS SDK offline mode vs migration prep
+
+### Phase 5: Subscription + Paywall
+1. **RevenueCat integration** — offerings, paywall screen matching `finalized_go_pro_screen/`
+2. **Free tier gate** — limit to 1 scheduled pill, unlimited one-time tracking
+3. **Pro tier** — unlimited scheduled pills, priority notifications
 
 ### Design Reference Reminder
 All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_html/`. Each folder contains:
@@ -441,21 +553,23 @@ All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_h
 
 The design system documentation is in `docs/stitch_halflifecontrol_html/vitality_clear/DESIGN.md`.
 
-### Key Patterns Established in Phase 1 & 2
+### Key Patterns Established in Phase 1, 2 & 3
 - **Import paths**: Always use `@/` alias (e.g., `import { colors } from '@/theme'`)
 - **Styling**: Use `StyleSheet.create()` with theme tokens, never hardcode colors/sizes
 - **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`; pill components from `@/components/pills`
 - **State**: Use Zustand stores in `src/stores/`
 - **Firebase**: Use service functions from `src/services/firebase/`, never import Firebase directly in screens
-- **Navigation**: Expo Router file-based routing — create a file in the right directory, it becomes a route
+- **Navigation**: Expo Router file-based routing — `(tabs)` for tab screens, `pill/` as modal Stack
 - **Auth gating**: Handled automatically by root `_layout.tsx` — no need to check auth in individual screens
 - **Pure core logic**: `src/core/` has zero React/Firebase imports — pure TypeScript math and scheduling
 - **Real-time subscriptions**: Use Firestore `onSnapshot` listeners in stores, clean up on unmount
 - **Countdown pattern**: Calculate from absolute timestamps on each tick — no drift, instant catch-up on foreground
+- **Drug search**: 3-tier: curated DB (instant) → openFDA (async fallback) → manual entry (always available)
+- **Modal screens**: Use `presentation: 'modal'` in Stack.Screen options for overlay screens like add pill
 
 ---
 
-## File Inventory (Phase 2 Complete)
+## File Inventory (Phase 3 Complete)
 
 ```
 src/
@@ -469,13 +583,17 @@ src/
 │   │   └── forgot-password.tsx        # Password reset screen
 │   ├── (onboarding)/
 │   │   ├── _layout.tsx                # Stack nav, no header
-│   │   └── welcome.tsx                # "Do you take pills?" screen (placeholder)
+│   │   └── welcome.tsx                # Welcome screen (two CTAs, login link)
 │   └── (main)/
-│       ├── _layout.tsx                # Stack nav, no header
-│       ├── dashboard.tsx              # Dashboard with pill list, FAB, dose tracking
+│       ├── _layout.tsx                # Stack: (tabs) + pill/ modal
+│       ├── (tabs)/
+│       │   ├── _layout.tsx            # Tab navigator (Dashboard, History, Settings)
+│       │   ├── dashboard.tsx          # SectionList dashboard, FAB, avatar, pill tracking
+│       │   ├── history.tsx            # Dose history placeholder
+│       │   └── settings.tsx           # Account, legal, sign out
 │       └── pill/
 │           ├── _layout.tsx            # Stack nav, no header
-│           └── add.tsx                # Add medication form (manual entry)
+│           └── add.tsx                # Add medication: search + dosage + schedule + color + success modal
 ├── components/
 │   ├── ui/
 │   │   ├── index.ts                   # Barrel export
@@ -487,20 +605,25 @@ src/
 │       ├── index.ts                   # Barrel export
 │       ├── ProgressRing.tsx           # SVG circular countdown ring
 │       ├── CountdownTimer.tsx         # Ring + concentration % + time label
-│       └── PillCard.tsx               # Full pill card with countdown/next-dose
+│       ├── PillCard.tsx               # Full pill card with countdown/next-dose
+│       └── DrugSearchBar.tsx          # 3-tier typeahead (curated + openFDA + manual)
 ├── core/
 │   ├── types.ts                       # Domain types (Pill, Dose, UserProfile, etc.)
 │   ├── halflife.ts                    # Pure decay math (concentration, elimination, formatting)
 │   ├── scheduling.ts                  # Next dose calculation, schedule description
 │   └── pillColors.ts                  # 10 predefined accent colors for pills
+├── data/
+│   └── drugDatabase.ts                # 50 curated drugs with half-life data + search function
 ├── hooks/
 │   └── useCountdown.ts                # Real-time countdown hook (1s interval, AppState aware)
 ├── services/
-│   └── firebase/
-│       ├── index.ts                   # Barrel export (auth + pills)
-│       ├── config.ts                  # Firebase app/auth/db initialization
-│       ├── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
-│       └── pills.ts                   # Pill/dose Firestore CRUD + real-time subscriptions
+│   ├── firebase/
+│   │   ├── index.ts                   # Barrel export (auth + pills)
+│   │   ├── config.ts                  # Firebase app/auth/db initialization
+│   │   ├── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
+│   │   └── pills.ts                   # Pill/dose Firestore CRUD + real-time subscriptions
+│   └── openfda/
+│       └── index.ts                   # openFDA Drug Label API client with caching
 ├── stores/
 │   ├── useAuthStore.ts                # Global auth state (Zustand)
 │   └── usePillStore.ts               # Pills + doses state with Firestore sync (Zustand)

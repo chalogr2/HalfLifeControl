@@ -1,24 +1,26 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
+import { DrugSearchBar, type SearchResult } from '@/components/pills';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { PILL_COLORS } from '@/core/pillColors';
 import type { PillType, ScheduleFrequency } from '@/core/types';
 
-const FREQUENCY_OPTIONS: { label: string; value: ScheduleFrequency }[] = [
-  { label: 'Daily', value: 'daily' },
+const FREQUENCY_OPTIONS: { label: string; value: ScheduleFrequency | 'as_needed' }[] = [
+  { label: 'Every day', value: 'daily' },
   { label: 'Specific days', value: 'specific_days' },
-  { label: 'Every N days', value: 'every_n_days' },
+  { label: 'As needed', value: 'as_needed' },
 ];
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function AddPillScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ type?: string }>();
   const user = useAuthStore((s) => s.user);
   const addPill = usePillStore((s) => s.addPill);
 
@@ -28,13 +30,17 @@ export default function AddPillScreen() {
   const [dosageUnit, setDosageUnit] = useState('mg');
   const [halfLife, setHalfLife] = useState('');
   const [halfLifeUnit, setHalfLifeUnit] = useState<'minutes' | 'hours'>('hours');
-  const [pillType, setPillType] = useState<PillType>('scheduled');
-  const [frequency, setFrequency] = useState<ScheduleFrequency>('daily');
+  const [halfLifeSource, setHalfLifeSource] = useState<'curated' | 'manual'>('manual');
+  const [pillType, setPillType] = useState<PillType>(
+    params.type === 'random' ? 'random' : 'scheduled',
+  );
+  const [frequency, setFrequency] = useState<ScheduleFrequency | 'as_needed'>('daily');
   const [timeOfDay, setTimeOfDay] = useState('08:00');
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
-  const [intervalDays, setIntervalDays] = useState('2');
   const [selectedColor, setSelectedColor] = useState<string>(PILL_COLORS[0]);
   const [saving, setSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [savedPillName, setSavedPillName] = useState('');
 
   const halfLifeMinutes =
     halfLifeUnit === 'hours' ? parseFloat(halfLife || '0') * 60 : parseFloat(halfLife || '0');
@@ -44,6 +50,27 @@ export default function AddPillScreen() {
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   };
+
+  const handleDrugSelect = useCallback((result: SearchResult) => {
+    setDrugName(result.name);
+    if (result.drug) {
+      // Curated — auto-fill half-life and dosage
+      const hl = result.drug.halfLifeMinutes;
+      if (hl >= 60) {
+        setHalfLife(String(Math.round(hl / 60 * 10) / 10));
+        setHalfLifeUnit('hours');
+      } else {
+        setHalfLife(String(hl));
+        setHalfLifeUnit('minutes');
+      }
+      setDosage(String(result.drug.commonDosageMg));
+      setHalfLifeSource('curated');
+    } else {
+      setHalfLifeSource('manual');
+    }
+  }, []);
+
+  const effectivePillType: PillType = frequency === 'as_needed' ? 'random' : pillType;
 
   const handleSave = async () => {
     if (!user) return;
@@ -58,35 +85,40 @@ export default function AddPillScreen() {
 
     setSaving(true);
     try {
-      const schedule =
-        pillType === 'scheduled'
-          ? {
-              timeOfDay,
-              frequency,
-              ...(frequency === 'specific_days' ? { daysOfWeek } : {}),
-              ...(frequency === 'every_n_days' ? { intervalDays: parseInt(intervalDays, 10) || 2 } : {}),
-            }
-          : null;
+      const isScheduled = effectivePillType === 'scheduled';
+      const schedule = isScheduled
+        ? {
+            timeOfDay,
+            frequency: frequency as ScheduleFrequency,
+            ...(frequency === 'specific_days' ? { daysOfWeek } : {}),
+          }
+        : null;
 
       await addPill(user.uid, {
         drugName: drugName.trim(),
         drugId: '',
         halfLifeMinutes,
-        halfLifeSource: 'manual',
+        halfLifeSource,
         dosageMg: parseFloat(dosage) || 0,
         dosageUnit,
-        pillType,
+        pillType: effectivePillType,
         schedule,
         color: selectedColor,
         isActive: true,
       });
 
-      router.back();
+      setSavedPillName(drugName.trim());
+      setShowSuccess(true);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to save pill.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSuccessDismiss = () => {
+    setShowSuccess(false);
+    router.back();
   };
 
   return (
@@ -95,137 +127,138 @@ export default function AddPillScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Typography variant="titleMd" color="primary">Cancel</Typography>
+            <Typography variant="bodyLg" color="primary">Cancel</Typography>
           </Pressable>
-          <Typography variant="headlineSm">Add Medication</Typography>
-          <View style={{ width: 60 }} />
+          <Typography variant="titleLg">Refined Add Medication V2</Typography>
+          <View style={{ width: 50 }} />
         </View>
 
-        {/* Type toggle */}
-        <View style={styles.typeRow}>
-          <Pressable
-            style={[styles.typeBtn, pillType === 'scheduled' && styles.typeBtnActive]}
-            onPress={() => setPillType('scheduled')}
-          >
-            <Typography
-              variant="labelLg"
-              color={pillType === 'scheduled' ? 'onPrimary' : 'onSurfaceVariant'}
-            >
-              Scheduled
-            </Typography>
-          </Pressable>
-          <Pressable
-            style={[styles.typeBtn, pillType === 'random' && styles.typeBtnActive]}
-            onPress={() => setPillType('random')}
-          >
-            <Typography
-              variant="labelLg"
-              color={pillType === 'random' ? 'onPrimary' : 'onSurfaceVariant'}
-            >
-              One-time
-            </Typography>
-          </Pressable>
-        </View>
+        {/* Title */}
+        <Typography variant="headlineMd" style={styles.title}>
+          Which pill are you adding?
+        </Typography>
+        <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.titleSub}>
+          Search our database or type a custom name.
+        </Typography>
 
-        {/* Drug name */}
-        <Input
-          label="Drug name"
-          placeholder="e.g. Ibuprofen"
-          value={drugName}
-          onChangeText={setDrugName}
-          autoCapitalize="words"
-        />
+        {/* Drug Search */}
+        <DrugSearchBar onSelect={handleDrugSelect} />
 
-        {/* Dosage */}
-        <View style={styles.row}>
-          <View style={{ flex: 2 }}>
-            <Input
-              label="Dosage"
-              placeholder="200"
-              value={dosage}
-              onChangeText={setDosage}
-              keyboardType="numeric"
-            />
+        {/* Dosage section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Typography variant="labelMd" color="onPrimary">2</Typography>
+            </View>
+            <Typography variant="titleMd">Dosage</Typography>
           </View>
-          <View style={{ flex: 1 }}>
-            <Input
-              label="Unit"
-              placeholder="mg"
-              value={dosageUnit}
-              onChangeText={setDosageUnit}
-            />
+          <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+            How much do you take?
+          </Typography>
+          <View style={styles.row}>
+            <View style={{ flex: 2 }}>
+              <Input
+                label=""
+                placeholder="85"
+                value={dosage}
+                onChangeText={setDosage}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="mg"
+                value={dosageUnit}
+                onChangeText={setDosageUnit}
+              />
+            </View>
           </View>
         </View>
 
-        {/* Half-life */}
-        <View style={styles.row}>
-          <View style={{ flex: 2 }}>
-            <Input
-              label="Half-life"
-              placeholder={halfLifeUnit === 'hours' ? '2.5' : '150'}
-              value={halfLife}
-              onChangeText={setHalfLife}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.unitToggle}>
-            <Pressable
-              style={[styles.unitBtn, halfLifeUnit === 'hours' && styles.unitBtnActive]}
-              onPress={() => setHalfLifeUnit('hours')}
-            >
-              <Typography
-                variant="labelMd"
-                color={halfLifeUnit === 'hours' ? 'onPrimary' : 'onSurfaceVariant'}
-              >
-                hrs
-              </Typography>
-            </Pressable>
-            <Pressable
-              style={[styles.unitBtn, halfLifeUnit === 'minutes' && styles.unitBtnActive]}
-              onPress={() => setHalfLifeUnit('minutes')}
-            >
-              <Typography
-                variant="labelMd"
-                color={halfLifeUnit === 'minutes' ? 'onPrimary' : 'onSurfaceVariant'}
-              >
-                min
-              </Typography>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Schedule (only for scheduled pills) */}
-        {pillType === 'scheduled' && (
-          <View style={styles.scheduleSection}>
-            <Typography variant="titleMd" style={styles.sectionTitle}>Schedule</Typography>
-
-            <Input
-              label="Time of day"
-              placeholder="08:00"
-              value={timeOfDay}
-              onChangeText={setTimeOfDay}
-            />
-
-            {/* Frequency */}
-            <View style={styles.freqRow}>
-              {FREQUENCY_OPTIONS.map((opt) => (
+        {/* Half-life (only if manual) */}
+        {halfLifeSource === 'manual' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Typography variant="labelMd" color="onPrimary">HL</Typography>
+              </View>
+              <Typography variant="titleMd">Half-Life</Typography>
+            </View>
+            <View style={styles.row}>
+              <View style={{ flex: 2 }}>
+                <Input
+                  label=""
+                  placeholder={halfLifeUnit === 'hours' ? '2.5' : '150'}
+                  value={halfLife}
+                  onChangeText={setHalfLife}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.unitToggle}>
                 <Pressable
-                  key={opt.value}
-                  style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
-                  onPress={() => setFrequency(opt.value)}
+                  style={[styles.unitBtn, halfLifeUnit === 'hours' && styles.unitBtnActive]}
+                  onPress={() => setHalfLifeUnit('hours')}
                 >
                   <Typography
                     variant="labelMd"
-                    color={frequency === opt.value ? 'onPrimary' : 'onSurfaceVariant'}
+                    color={halfLifeUnit === 'hours' ? 'onPrimary' : 'onSurfaceVariant'}
                   >
-                    {opt.label}
+                    hrs
                   </Typography>
                 </Pressable>
-              ))}
+                <Pressable
+                  style={[styles.unitBtn, halfLifeUnit === 'minutes' && styles.unitBtnActive]}
+                  onPress={() => setHalfLifeUnit('minutes')}
+                >
+                  <Typography
+                    variant="labelMd"
+                    color={halfLifeUnit === 'minutes' ? 'onPrimary' : 'onSurfaceVariant'}
+                  >
+                    min
+                  </Typography>
+                </Pressable>
+              </View>
             </View>
+          </View>
+        )}
 
-            {/* Day picker */}
-            {frequency === 'specific_days' && (
+        {/* Schedule section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Typography variant="labelMd" color="onPrimary">3</Typography>
+            </View>
+            <Typography variant="titleMd">Schedule</Typography>
+          </View>
+
+          {/* Frequency toggles */}
+          <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+            Frequency
+          </Typography>
+          <View style={styles.freqRow}>
+            {FREQUENCY_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.value}
+                style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
+                onPress={() => setFrequency(opt.value)}
+              >
+                <Typography
+                  variant="labelMd"
+                  color={frequency === opt.value ? 'onPrimary' : 'onSurfaceVariant'}
+                >
+                  {opt.label}
+                </Typography>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Day picker for specific days */}
+          {frequency === 'specific_days' && (
+            <>
+              <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+                Select Days
+              </Typography>
               <View style={styles.dayRow}>
                 {DAY_LABELS.map((label, i) => (
                   <Pressable
@@ -234,7 +267,7 @@ export default function AddPillScreen() {
                     onPress={() => toggleDay(i)}
                   >
                     <Typography
-                      variant="labelSm"
+                      variant="labelMd"
                       color={daysOfWeek.includes(i) ? 'onPrimary' : 'onSurfaceVariant'}
                     >
                       {label}
@@ -242,44 +275,82 @@ export default function AddPillScreen() {
                   </Pressable>
                 ))}
               </View>
-            )}
+            </>
+          )}
 
-            {/* Interval */}
-            {frequency === 'every_n_days' && (
+          {/* Reminder time */}
+          {frequency !== 'as_needed' && (
+            <>
+              <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+                Reminder Time
+              </Typography>
               <Input
-                label="Every N days"
-                placeholder="2"
-                value={intervalDays}
-                onChangeText={setIntervalDays}
-                keyboardType="numeric"
+                label=""
+                placeholder="08:00"
+                value={timeOfDay}
+                onChangeText={setTimeOfDay}
               />
-            )}
-          </View>
-        )}
-
-        {/* Color picker */}
-        <Typography variant="titleMd" style={styles.sectionTitle}>Color</Typography>
-        <View style={styles.colorRow}>
-          {PILL_COLORS.map((c) => (
-            <Pressable
-              key={c}
-              style={[
-                styles.colorDot,
-                { backgroundColor: c },
-                selectedColor === c && styles.colorDotSelected,
-              ]}
-              onPress={() => setSelectedColor(c)}
-            />
-          ))}
+            </>
+          )}
         </View>
 
+        {/* Pill Color */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Typography variant="labelMd" color="onPrimary">4</Typography>
+            </View>
+            <Typography variant="titleMd">Pill Color</Typography>
+          </View>
+          <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+            Visual Identity
+          </Typography>
+          <View style={styles.colorRow}>
+            {PILL_COLORS.map((c) => (
+              <Pressable
+                key={c}
+                style={[
+                  styles.colorDot,
+                  { backgroundColor: c },
+                  selectedColor === c && styles.colorDotSelected,
+                ]}
+                onPress={() => setSelectedColor(c)}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Spacer for FAB */}
+        <View style={{ height: spacing[24] }} />
+      </ScrollView>
+
+      {/* Fixed bottom CTA */}
+      <View style={styles.bottomCTA}>
         <Button
-          title={pillType === 'scheduled' ? 'Add to Stack' : 'Start Tracking'}
+          title={effectivePillType === 'scheduled' ? 'Add to My Stack' : 'Start Tracking'}
           onPress={handleSave}
           loading={saving}
-          style={styles.saveBtn}
         />
-      </ScrollView>
+      </View>
+
+      {/* Success Modal */}
+      <Modal visible={showSuccess} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.successIcon}>
+              <Typography variant="displaySm" align="center">✓</Typography>
+            </View>
+            <Typography variant="headlineSm" align="center">
+              Medication Added!
+            </Typography>
+            <Typography variant="bodyMd" color="onSurfaceVariant" align="center" style={styles.successSub}>
+              {savedPillName} has been added to your{' '}
+              {effectivePillType === 'scheduled' ? 'daily stack' : 'tracking'}.
+            </Typography>
+            <Button title="Back to Dashboard" onPress={handleSuccessDismiss} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -290,30 +361,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   scroll: {
-    padding: spacing[6],
-    paddingBottom: spacing[24],
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[4],
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing[6],
+    marginBottom: spacing[4],
   },
-  typeRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
+  title: {
+    marginBottom: spacing[1],
+  },
+  titleSub: {
     marginBottom: spacing[5],
   },
-  typeBtn: {
-    flex: 1,
-    height: MIN_TOUCH_TARGET,
-    borderRadius: borderRadius.xl,
+  section: {
+    marginTop: spacing[6],
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    marginBottom: spacing[2],
+  },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceContainerHigh,
   },
-  typeBtnActive: {
-    backgroundColor: colors.primary,
+  sectionSub: {
+    marginBottom: spacing[3],
   },
   row: {
     flexDirection: 'row',
@@ -337,22 +418,15 @@ const styles = StyleSheet.create({
   unitBtnActive: {
     backgroundColor: colors.primary,
   },
-  scheduleSection: {
-    marginTop: spacing[5],
-    gap: spacing[3],
-  },
-  sectionTitle: {
-    marginTop: spacing[4],
-    marginBottom: spacing[2],
-  },
   freqRow: {
     flexDirection: 'row',
     gap: spacing[2],
+    marginBottom: spacing[3],
   },
   freqBtn: {
     flex: 1,
-    height: 40,
-    borderRadius: borderRadius.md,
+    height: MIN_TOUCH_TARGET,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceContainerHigh,
@@ -362,8 +436,9 @@ const styles = StyleSheet.create({
   },
   dayRow: {
     flexDirection: 'row',
-    gap: spacing[1],
+    gap: spacing[2],
     justifyContent: 'space-between',
+    marginBottom: spacing[3],
   },
   dayBtn: {
     width: 40,
@@ -380,18 +455,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing[3],
     flexWrap: 'wrap',
-    marginBottom: spacing[6],
   },
   colorDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   colorDotSelected: {
     borderWidth: 3,
     borderColor: colors.onSurface,
   },
-  saveBtn: {
-    marginTop: spacing[4],
+  bottomCTA: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: spacing[6],
+    paddingBottom: spacing[10],
+    backgroundColor: colors.surface,
+  },
+  // Success modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing[6],
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: spacing[8],
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    gap: spacing[4],
+  },
+  successIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.secondaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successSub: {
+    maxWidth: 260,
   },
 });

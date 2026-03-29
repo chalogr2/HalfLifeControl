@@ -50,7 +50,7 @@ function AuthGate() {
       if (user && !user.onboardingComplete) {
         router.replace('/(onboarding)/welcome');
       } else {
-        router.replace('/(main)/dashboard');
+        router.replace('/(main)/(tabs)/dashboard');
       }
     }
   }, [isAuthenticated, isLoading, segments]);

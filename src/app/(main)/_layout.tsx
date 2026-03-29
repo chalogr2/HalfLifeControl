@@ -8,6 +8,12 @@ export default function MainLayout() {
         headerShown: false,
         contentStyle: { backgroundColor: colors.surface },
       }}
-    />
+    >
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen
+        name="pill"
+        options={{ presentation: 'modal' }}
+      />
+    </Stack>
   );
 }

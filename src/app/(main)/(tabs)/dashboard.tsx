@@ -1,14 +1,19 @@
 import React, { useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, SectionList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography } from '@/components/ui';
 import { PillCard } from '@/components/pills';
-import { colors, spacing, borderRadius } from '@/theme';
+import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { nextScheduledDose } from '@/core/scheduling';
 import type { Pill, Dose } from '@/core/types';
+
+interface Section {
+  title: string;
+  data: Pill[];
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -25,6 +30,13 @@ export default function DashboardScreen() {
   const scheduledPills = useMemo(() => pills.filter((p) => p.pillType === 'scheduled'), [pills]);
   const randomPills = useMemo(() => pills.filter((p) => p.pillType === 'random'), [pills]);
 
+  const sections = useMemo<Section[]>(() => {
+    const s: Section[] = [];
+    if (scheduledPills.length > 0) s.push({ title: 'My Daily Stack', data: scheduledPills });
+    if (randomPills.length > 0) s.push({ title: 'One-Time Tracking', data: randomPills });
+    return s;
+  }, [scheduledPills, randomPills]);
+
   const getActiveDose = useCallback(
     (pillId: string): Dose | undefined => activeDoses.find((d) => d.pillId === pillId),
     [activeDoses],
@@ -37,7 +49,7 @@ export default function DashboardScreen() {
     const m = next.getMinutes();
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
-    return `Next: ${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    return `Next dose: ${h12}:${String(m).padStart(2, '0')} ${ampm}`;
   }, []);
 
   const handleTakePill = useCallback(
@@ -55,10 +67,8 @@ export default function DashboardScreen() {
   const handlePillPress = useCallback(
     (pill: Pill) => {
       const dose = getActiveDose(pill.id);
-      if (dose) {
-        // Already active — could navigate to detail later
-        return;
-      }
+      if (dose) return; // Already tracking
+
       Alert.alert(
         pill.drugName,
         'Record that you just took this?',
@@ -84,44 +94,64 @@ export default function DashboardScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={[...scheduledPills, ...randomPills]}
-        keyExtractor={(item) => item.id}
-        renderItem={renderPill}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListHeaderComponent={
-          <>
-            <View style={styles.header}>
-              <Typography variant="headlineMd">
-                {user?.displayName ? `Hi, ${user.displayName}` : 'Dashboard'}
-              </Typography>
-            </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Typography variant="headlineMd">My Daily Stack</Typography>
+        <Pressable style={styles.avatar}>
+          <Typography variant="labelLg" color="onPrimary">
+            {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
+          </Typography>
+        </Pressable>
+      </View>
 
-            {/* Scheduled section header */}
-            {scheduledPills.length > 0 && (
-              <Typography variant="titleMd" color="onSurfaceVariant" style={styles.sectionTitle}>
-                My Daily Stack
-              </Typography>
-            )}
-          </>
-        }
-        ListEmptyComponent={
-          !isLoading ? (
-            <View style={styles.empty}>
-              <Typography variant="headlineSm" align="center" color="onSurfaceVariant">
-                No medications yet
-              </Typography>
-              <Typography variant="bodyLg" align="center" color="outline" style={styles.emptySubtext}>
-                Tap the + button below to add your first medication.
-              </Typography>
-            </View>
-          ) : null
-        }
-      />
+      {pills.length === 0 && !isLoading ? (
+        <View style={styles.empty}>
+          <Typography variant="headlineSm" align="center" color="onSurfaceVariant">
+            No medications yet
+          </Typography>
+          <Typography variant="bodyLg" align="center" color="outline" style={styles.emptySubtext}>
+            Tap the + button to add your first medication.
+          </Typography>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderItem={renderPill}
+          renderSectionHeader={({ section }) => (
+            <Typography variant="titleMd" color="onSurfaceVariant" style={styles.sectionHeader}>
+              {section.title}
+            </Typography>
+          )}
+          renderSectionFooter={({ section }) =>
+            section.title === 'My Daily Stack' ? (
+              <Pressable
+                style={styles.addToStack}
+                onPress={() => router.push('/(main)/pill/add?type=scheduled')}
+              >
+                <Typography variant="labelLg" color="primary">
+                  + Add pill to stack
+                </Typography>
+              </Pressable>
+            ) : section.title === 'One-Time Tracking' ? (
+              <Pressable
+                style={styles.addToStack}
+                onPress={() => router.push('/(main)/pill/add?type=random')}
+              >
+                <Typography variant="labelLg" color="primary">
+                  + Track another pill
+                </Typography>
+              </Pressable>
+            ) : null
+          }
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+        />
+      )}
 
-      {/* Floating Action Button */}
+      {/* FAB */}
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
         onPress={() => router.push('/(main)/pill/add')}
@@ -141,23 +171,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[4],
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   list: {
     paddingHorizontal: spacing[6],
     paddingBottom: spacing[24],
   },
-  header: {
-    paddingTop: spacing[4],
-    paddingBottom: spacing[5],
-  },
-  sectionTitle: {
+  sectionHeader: {
+    marginTop: spacing[5],
     marginBottom: spacing[3],
   },
   separator: {
     height: spacing[3],
   },
-  empty: {
-    paddingVertical: spacing[16],
+  addToStack: {
     alignItems: 'center',
+    paddingVertical: spacing[4],
+    marginTop: spacing[2],
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.outlineVariant,
+  },
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[6],
     gap: spacing[3],
   },
   emptySubtext: {
@@ -165,7 +219,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: spacing[8],
+    bottom: spacing[3],
     right: spacing[6],
     width: 64,
     height: 64,
