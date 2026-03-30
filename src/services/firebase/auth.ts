@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './config';
 import type { UserProfile } from '@/core/types';
 
@@ -21,6 +21,7 @@ export async function signUp(email: string, password: string): Promise<UserProfi
     settings: {
       autoAssumeTaken: false,
       notificationsEnabled: true,
+      reminderMode: 'auto_start',
     },
   };
 
@@ -60,8 +61,20 @@ export async function getUserProfile(uid: string): Promise<UserProfile> {
     settings: data.settings ?? {
       autoAssumeTaken: false,
       notificationsEnabled: true,
+      reminderMode: 'auto_start',
     },
   };
+}
+
+export async function completeOnboarding(uid: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { onboardingComplete: true });
+}
+
+export async function updateUserSettings(
+  uid: string,
+  settings: Record<string, any>,
+): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { settings });
 }
 
 export function onAuthChanged(callback: (user: User | null) => void) {

@@ -15,6 +15,10 @@ export default function MainLayout() {
         options={{ presentation: 'modal' }}
       />
       <Stack.Screen name="history" />
+      <Stack.Screen
+        name="subscription"
+        options={{ presentation: 'modal' }}
+      />
     </Stack>
   );
 }

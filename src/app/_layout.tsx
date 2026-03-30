@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import { onAuthChanged, getUserProfile } from '@/services/firebase/auth';
 import { colors } from '@/theme';
 
@@ -13,6 +14,7 @@ SplashScreen.preventAutoHideAsync();
 
 function useFirebaseAuthListener() {
   const { setUser, setLoading } = useAuthStore();
+  const initSubscriptions = useSubscriptionStore((s) => s.init);
 
   useEffect(() => {
     const unsubscribe = onAuthChanged(async (firebaseUser) => {
@@ -20,8 +22,9 @@ function useFirebaseAuthListener() {
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           setUser(profile);
+          // Initialize RevenueCat with the user's ID
+          initSubscriptions(firebaseUser.uid);
         } catch {
-          // Profile doesn't exist yet (edge case) — treat as unauthenticated
           setUser(null);
         }
       } else {

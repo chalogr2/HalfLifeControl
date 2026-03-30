@@ -609,12 +609,75 @@ Ran `npx tsc --noEmit` — **0 errors**.
 
 ---
 
-## What Needs To Happen Next
+## Phase 5: Subscription + Paywall + Bug Fixes
 
-### Phase 5: Subscription + Paywall
-1. **RevenueCat integration** — offerings, paywall screen matching `finalized_go_pro_screen/`
-2. **Free tier gate** — limit to 1 scheduled pill, unlimited one-time tracking
-3. **Pro tier** — unlimited scheduled pills, priority notifications
+**Completed**: 2026-03-31
+
+### What Was Built
+
+1. **RevenueCat subscription service** (`src/services/subscription/index.ts`)
+   - `initSubscriptions(userId)` — configures RevenueCat with platform-appropriate API key
+   - `getSubscriptionTier()` — checks active entitlements, returns `'free'` or `'pro'`
+   - `getOfferings()` — fetches available packages (monthly/annual)
+   - `purchasePackage(pkg)` — executes purchase, returns new tier
+   - `restorePurchases()` — restores previous purchases
+   - `onSubscriptionChange(callback)` — listener for tier changes
+   - **Graceful degradation**: When RevenueCat API keys aren't configured, all functions return `'free'` tier with no errors — app works fully in development without RevenueCat setup
+
+2. **Subscription Zustand store** (`src/stores/useSubscriptionStore.ts`)
+   - `FREE_SCHEDULED_LIMIT = 1` — the free tier pill cap
+   - Manages `tier`, `packages`, `isLoading` state
+   - `canAddScheduledPill(currentCount)` — pure check used by add-pill flow
+   - `init(userId)` — called from root auth listener on login
+   - `purchase(pkg)` / `restore()` — delegates to service, updates store
+
+3. **Paywall screen** (`src/app/(main)/subscription/paywall.tsx`)
+   - Matches Stitch mockup `finalized_go_pro_screen/`
+   - Feature list: unlimited scheduled pills, unlimited random tracking, future features
+   - Annual/Monthly plan cards with radio selection
+   - "BEST VALUE" badge on annual plan
+   - Displays RevenueCat pricing when available, fallback hardcoded prices ($3.33/mo annual, $4.99/mo)
+   - Purchase, Restore, and "Continue with Free" CTAs
+   - Loading states and error alerts
+
+4. **Free tier gate in add-pill flow** (`src/app/(main)/pill/add.tsx`)
+   - Checks `canAddScheduledPill(scheduledCount)` at save time (not form load)
+   - If limit reached, redirects to paywall instead of saving
+   - Users can explore the full add-pill UX before seeing the paywall
+
+5. **Subscription route group** (`src/app/(main)/subscription/`)
+   - `_layout.tsx` — Stack navigator, no header
+   - `paywall.tsx` — the Go Pro screen
+   - Registered as modal presentation in `(main)/_layout.tsx`
+
+6. **Root layout subscription init** (`src/app/_layout.tsx`)
+   - Auth listener now calls `initSubscriptions(firebaseUser.uid)` after profile fetch
+   - Subscription tier is available app-wide from first login
+
+### Bug Fixes (from DEVELOPERINPUT.md audit)
+
+7. **Fixed: `onboardingComplete` never set to `true`** (DEVELOPERINPUT #9)
+   - Added `completeOnboarding(uid)` to `src/services/firebase/auth.ts`
+   - Called after first pill is saved in `pill/add.tsx`
+   - Also updates local Zustand state so auth gate doesn't redirect
+
+8. **Fixed: Settings reminder preference not persisted** (DEVELOPERINPUT #11)
+   - Added `updateUserSettings(uid, settings)` to `src/services/firebase/auth.ts`
+   - Settings screen now calls this on reminder mode change
+   - `ReminderMode` type moved from local definition to canonical `src/core/types.ts`
+
+### Settings Screen Updates (`src/app/(main)/(tabs)/settings.tsx`)
+   - Subscription status display: "Upgrade to Pro" card (free tier) or "Pro Plan Active" badge (pro tier)
+   - Upgrade card navigates to paywall
+   - Reminder mode persisted to Firestore via `updateUserSettings`
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**.
+
+---
+
+## What Needs To Happen Next
 
 ### Phase 6: Social Auth + Native Firebase Migration
 1. **Google Sign-In** + **Apple Sign-In** (enable disabled buttons)
@@ -630,7 +693,7 @@ All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_h
 
 The design system documentation is in `docs/stitch_halflifecontrol_html/vitality_clear/DESIGN.md`.
 
-### Key Patterns Established in Phase 1–4
+### Key Patterns Established in Phase 1–5
 - **Import paths**: Always use `@/` alias (e.g., `import { colors } from '@/theme'`)
 - **Styling**: Use `StyleSheet.create()` with theme tokens, never hardcode colors/sizes
 - **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`; pill components from `@/components/pills`
@@ -645,10 +708,12 @@ The design system documentation is in `docs/stitch_halflifecontrol_html/vitality
 - **Modal screens**: Use `presentation: 'modal'` in Stack.Screen options for overlay screens like add pill
 - **Dynamic routes**: Use `[param].tsx` for dynamic segments (e.g., `[date].tsx` for day detail)
 - **Notifications**: Use `src/services/notifications/` — schedule in dashboard effect, handle taps via response handler
+- **Subscription gating**: Check `canAddScheduledPill()` at action time, redirect to paywall if blocked
+- **Service degradation**: RevenueCat service returns safe defaults when API keys aren't configured
 
 ---
 
-## File Inventory (Phase 4 Complete)
+## File Inventory (Phase 5 Complete)
 
 ```
 src/
@@ -664,18 +729,21 @@ src/
 │   │   ├── _layout.tsx                # Stack nav, no header
 │   │   └── welcome.tsx                # Welcome screen (two CTAs, login link)
 │   └── (main)/
-│       ├── _layout.tsx                # Stack: (tabs) + pill/ modal + history/
+│       ├── _layout.tsx                # Stack: (tabs) + pill/ modal + history/ + subscription/
 │       ├── (tabs)/
 │       │   ├── _layout.tsx            # Tab navigator (Dashboard, History, Settings)
 │       │   ├── dashboard.tsx          # SectionList dashboard, FAB, avatar, notifications
 │       │   ├── history.tsx            # Dose history list with adherence %
-│       │   └── settings.tsx           # Reminder prefs, legal, sign out
+│       │   └── settings.tsx           # Reminder prefs, subscription status, legal, sign out
 │       ├── history/
 │       │   ├── _layout.tsx            # Stack nav, no header
 │       │   └── [date].tsx             # Day detail: completion ring, time groups, badge
-│       └── pill/
+│       ├── pill/
+│       │   ├── _layout.tsx            # Stack nav, no header
+│       │   └── add.tsx                # Add medication: search + dosage + schedule + color + sub gate
+│       └── subscription/
 │           ├── _layout.tsx            # Stack nav, no header
-│           └── add.tsx                # Add medication: search + dosage + schedule + color + success modal
+│           └── paywall.tsx            # Go Pro screen: features, plan cards, purchase/restore
 ├── components/
 │   ├── ui/
 │   │   ├── index.ts                   # Barrel export
@@ -702,15 +770,18 @@ src/
 │   ├── firebase/
 │   │   ├── index.ts                   # Barrel export (auth + pills + history)
 │   │   ├── config.ts                  # Firebase app/auth/db initialization
-│   │   ├── auth.ts                    # signUp, signIn, signOut, resetPassword, getUserProfile
+│   │   ├── auth.ts                    # Auth + completeOnboarding + updateUserSettings
 │   │   └── pills.ts                   # Pill/dose CRUD + real-time subs + history queries
 │   ├── notifications/
 │   │   └── index.ts                   # expo-notifications: schedule, cancel, handle responses
-│   └── openfda/
-│       └── index.ts                   # openFDA Drug Label API client with caching
+│   ├── openfda/
+│   │   └── index.ts                   # openFDA Drug Label API client with caching
+│   └── subscription/
+│       └── index.ts                   # RevenueCat wrapper: init, purchase, restore, tier check
 ├── stores/
 │   ├── useAuthStore.ts                # Global auth state (Zustand)
-│   └── usePillStore.ts               # Pills + doses state with Firestore sync (Zustand)
+│   ├── usePillStore.ts               # Pills + doses state with Firestore sync (Zustand)
+│   └── useSubscriptionStore.ts        # Subscription tier + paywall logic (Zustand)
 └── theme/
     ├── index.ts                       # Barrel export
     ├── colors.ts                      # 40+ Material Design 3 color tokens
@@ -739,7 +810,7 @@ Root config files:
 └── .env.example                       # Template for required env vars
 ```
 
-## Dependencies Installed (through Phase 4)
+## Dependencies Installed (through Phase 5)
 
 ```json
 {
@@ -761,7 +832,8 @@ Root config files:
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-svg": "^15.15.4",
-    "expo-notifications": "~0.35.0",
+    "expo-notifications": "~55.0.14",
+    "react-native-purchases": "^9.15.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },

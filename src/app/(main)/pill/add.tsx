@@ -7,6 +7,8 @@ import { DrugSearchBar, type SearchResult } from '@/components/pills';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
+import { useSubscriptionStore, FREE_SCHEDULED_LIMIT } from '@/stores/useSubscriptionStore';
+import { completeOnboarding } from '@/services/firebase/auth';
 import { PILL_COLORS } from '@/core/pillColors';
 import type { PillType, ScheduleFrequency } from '@/core/types';
 
@@ -23,6 +25,9 @@ export default function AddPillScreen() {
   const params = useLocalSearchParams<{ type?: string }>();
   const user = useAuthStore((s) => s.user);
   const addPill = usePillStore((s) => s.addPill);
+  const pills = usePillStore((s) => s.pills);
+  const canAddScheduledPill = useSubscriptionStore((s) => s.canAddScheduledPill);
+  const scheduledCount = pills.filter((p) => p.pillType === 'scheduled').length;
 
   // Form state
   const [drugName, setDrugName] = useState('');
@@ -83,9 +88,15 @@ export default function AddPillScreen() {
       return;
     }
 
+    // Free tier gate: check if user can add another scheduled pill
+    const isScheduled = effectivePillType === 'scheduled';
+    if (isScheduled && !canAddScheduledPill(scheduledCount)) {
+      router.push('/(main)/subscription/paywall');
+      return;
+    }
+
     setSaving(true);
     try {
-      const isScheduled = effectivePillType === 'scheduled';
       const schedule = isScheduled
         ? {
             timeOfDay,
@@ -106,6 +117,12 @@ export default function AddPillScreen() {
         color: selectedColor,
         isActive: true,
       });
+
+      // Mark onboarding complete after first pill added
+      if (user && !user.onboardingComplete) {
+        await completeOnboarding(user.uid);
+        useAuthStore.getState().setUser({ ...user, onboardingComplete: true });
+      }
 
       setSavedPillName(drugName.trim());
       setShowSuccess(true);

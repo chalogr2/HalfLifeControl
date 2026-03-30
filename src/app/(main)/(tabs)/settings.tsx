@@ -1,12 +1,13 @@
 import React, { useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { signOut } from '@/services/firebase/auth';
-
-type ReminderMode = 'auto_start' | 'prompt' | 'simple';
+import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
+import { signOut, updateUserSettings } from '@/services/firebase/auth';
+import type { ReminderMode } from '@/core/types';
 
 const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: string }[] = [
   {
@@ -27,9 +28,19 @@ const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: strin
 ];
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  // For now, store reminder mode locally. Will persist to Firestore later.
-  const [reminderMode, setReminderMode] = React.useState<ReminderMode>('auto_start');
+  const tier = useSubscriptionStore((s) => s.tier);
+  const [reminderMode, setReminderMode] = React.useState<ReminderMode>(
+    (user?.settings?.reminderMode as ReminderMode) ?? 'auto_start',
+  );
+
+  const handleReminderChange = useCallback((mode: ReminderMode) => {
+    setReminderMode(mode);
+    if (user) {
+      updateUserSettings(user.uid, { ...user.settings, reminderMode: mode });
+    }
+  }, [user]);
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -53,7 +64,7 @@ export default function SettingsScreen() {
           {REMINDER_OPTIONS.map((opt) => (
             <Pressable
               key={opt.value}
-              onPress={() => setReminderMode(opt.value)}
+              onPress={() => handleReminderChange(opt.value)}
               style={({ pressed }) => pressed && styles.pressed}
             >
               <Card
@@ -80,6 +91,32 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Subscription */}
+        {tier === 'free' ? (
+          <Pressable
+            style={styles.proCard}
+            onPress={() => router.push('/(main)/subscription/paywall')}
+          >
+            <View style={styles.proCardContent}>
+              <Typography variant="titleMd" color="onPrimary">Upgrade to Pro</Typography>
+              <Typography variant="bodyMd" color="onPrimaryContainer">
+                Unlock unlimited scheduled pills and future features.
+              </Typography>
+            </View>
+            <Typography variant="titleLg" color="onPrimary">→</Typography>
+          </Pressable>
+        ) : (
+          <Card variant="elevated" style={styles.proActiveCard}>
+            <View style={styles.proBadge}>
+              <Typography variant="labelSm" color="onPrimary">PRO</Typography>
+            </View>
+            <Typography variant="titleMd">Pro Plan Active</Typography>
+            <Typography variant="bodyMd" color="onSurfaceVariant">
+              You have access to all features.
+            </Typography>
+          </Card>
+        )}
 
         {/* Legal */}
         <Pressable style={styles.legalBtn}>
@@ -163,6 +200,32 @@ const styles = StyleSheet.create({
   reminderContent: {
     flex: 1,
     gap: spacing[1],
+  },
+  proCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xl,
+    padding: spacing[5],
+    marginBottom: spacing[4],
+  },
+  proCardContent: {
+    flex: 1,
+    gap: spacing[1],
+    marginRight: spacing[3],
+  },
+  proActiveCard: {
+    marginBottom: spacing[4],
+    gap: spacing[1],
+  },
+  proBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.secondary,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    marginBottom: spacing[1],
   },
   legalBtn: {
     flexDirection: 'row',

@@ -134,18 +134,11 @@ npx eas-cli login
 
 ---
 
-### 9. Onboarding completion is never set to `true`
+### 9. ~~Onboarding completion is never set to `true`~~ — FIXED (Phase 5)
 
-`src/services/firebase/auth.ts:19` creates users with `onboardingComplete: false`.
-`src/app/_layout.tsx:50` checks this to redirect to onboarding.
+**Fixed in**: `src/services/firebase/auth.ts` (added `completeOnboarding()`) and `src/app/(main)/pill/add.tsx` (calls it after first pill saved).
 
-**But nothing in the codebase ever sets `onboardingComplete: true`.**
-
-This means: after a user adds their first pill from the welcome screen, they'll be redirected to the main app — but on next app open, the auth gate will send them back to the welcome screen again.
-
-**Fix needed**: After the first pill is added (or when the user navigates from welcome to dashboard), update the Firestore user profile: `onboardingComplete: true`.
-
-**Status**: [ ] Will be fixed in code (flagged for next session)
+**Status**: [x] Fixed in Phase 5
 
 ---
 
@@ -168,13 +161,11 @@ Two places reference Terms of Service and Privacy Policy with no actual content 
 
 ---
 
-### 11. Settings reminder preference is not persisted
+### 11. ~~Settings reminder preference is not persisted~~ — FIXED (Phase 5)
 
-`src/app/(main)/(tabs)/settings.tsx:31` stores `reminderMode` in local React state. Closing and reopening the app resets it to `auto_start`.
+**Fixed in**: `src/services/firebase/auth.ts` (added `updateUserSettings()`) and `src/app/(main)/(tabs)/settings.tsx` (calls it on reminder mode change).
 
-**Fix needed**: Persist the selection to the Firestore user profile `settings.reminderMode` field.
-
-**Status**: [ ] Will be fixed in code (flagged for next session)
+**Status**: [x] Fixed in Phase 5
 
 ---
 
@@ -190,7 +181,9 @@ Two places reference Terms of Service and Privacy Policy with no actual content 
 
 ## NOT YET NEEDED (Future Phases)
 
-### Phase 5: Subscription (RevenueCat)
+### Phase 5: Subscription (RevenueCat) — Code complete, needs account setup
+
+Code is built and gracefully degrades without API keys. You need to set up RevenueCat to enable real purchases:
 
 | Item | Status |
 |------|--------|
@@ -198,6 +191,7 @@ Two places reference Terms of Service and Privacy Policy with no actual content 
 | Apple app added with shared secret | [ ] |
 | Android app added with service account | [ ] |
 | Products created (monthly $4.99, yearly $39.99) | [ ] |
+| Entitlement "pro" created in RevenueCat dashboard | [ ] |
 | `EXPO_PUBLIC_REVENUECAT_APPLE_KEY` in `.env` | [ ] |
 | `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` in `.env` | [ ] |
 

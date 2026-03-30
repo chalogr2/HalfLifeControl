@@ -6,6 +6,8 @@ export {
   resetPassword,
   getUserProfile,
   onAuthChanged,
+  completeOnboarding,
+  updateUserSettings,
 } from './auth';
 export {
   addPill,
