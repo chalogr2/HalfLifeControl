@@ -776,6 +776,48 @@ The original schema used individual Firestore documents per pill and dose, with 
 
 **Security: Pill limit enforced at database level** — Firestore rules now check `subscriptionTier` and reject writes that add pills beyond the free limit, preventing client-side bypass.
 
+### Write-Ahead Log (WAL) — Multi-Device Safe, Guaranteed Reliability
+
+**Problem**: The Firebase JS SDK does not guarantee writes survive app kills. Additionally, the original WAL stored full document snapshots, which would overwrite concurrent writes from other devices (phone + watch).
+
+**Solution**: Operation-based WAL with a hybrid write strategy:
+
+**Append operations** (most frequent — recording doses, adding pills) use Firestore `arrayUnion`:
+- 0 Firestore reads, 1 write per operation
+- Commutative: Phone adds Aspirin + Watch adds Metformin → both survive
+- `setDoc({ merge: true })` for history creates the month doc if it doesn't exist
+
+**Mutation operations** (rare — editing/deleting pills, dismissing doses) use `runTransaction`:
+- 1 Firestore read, 1 write per operation
+- Read-then-merge: concurrent edits don't overwrite each other
+
+**WAL entry format** — operations, not state snapshots:
+| Operation | Trigger | Firestore Method | Cost |
+|-----------|---------|-----------------|------|
+| `addPill` | User adds pill | `arrayUnion` | 0R 1W |
+| `addDose` | User takes pill | `arrayUnion` | 0R 1W |
+| `addHistoryDose` | Dose recorded | `arrayUnion` + merge | 0R 1W |
+| `updatePill` | User edits pill | `runTransaction` | 1R 1W |
+| `deletePill` | User removes pill | `runTransaction` | 1R 1W |
+| `removeDose` | User dismisses dose | `runTransaction` | 1R 1W |
+
+**Flow** (same for all operations):
+1. Update local cache (AsyncStorage) — instant
+2. Enqueue operation to WAL (AsyncStorage) — persists across app kills
+3. Attempt Firestore write (arrayUnion or transaction)
+4. On success → dequeue; on failure → stays in WAL, retried on next app open
+
+**Conflict resolution**: If pending WAL entries exist when syncing from Firestore, local cache wins — remote data is not applied until all pending operations flush.
+
+**Multi-device edge cases**:
+- Same pill taken on phone + watch offline → both doses have unique IDs, both survive via `arrayUnion`
+- Pill edited on phone + dose recorded on watch → transaction edits pill, arrayUnion adds dose, no conflict
+- Pill deleted on phone while watch records dose → soft delete (isActive=false), dose still has denormalized data
+
+**Files:**
+- `src/services/cache/index.ts` — WAL types (`WriteOperation` discriminated union), `enqueueWrite`, `dequeueWrite`, `getWriteQueue`, `hasPendingWrites`
+- `src/services/firebase/pills.ts` — `executeOperation()` dispatches by op type, `enqueueAndAttempt()` is the common WAL wrapper, `flushWriteQueue()` retries on app open
+
 ### TypeScript Verification
 
 Ran `npx tsc --noEmit` — **0 errors**.
@@ -875,9 +917,9 @@ src/
 │   │   ├── config.ts                  # Firebase app/auth/db initialization
 │   │   ├── auth.ts                    # Auth + completeOnboarding + updateUserSettings
 │   │   ├── googleAuth.ts             # Google Sign-In via @react-native-google-signin + Firebase credential
-│   │   └── pills.ts                   # Single-doc CRUD + monthly history buckets + cache-first
+│   │   └── pills.ts                   # Single-doc CRUD + monthly history + hybrid WAL (arrayUnion + transactions)
 │   ├── cache/
-│   │   └── index.ts                   # AsyncStorage local cache for dashboard + history
+│   │   └── index.ts                   # AsyncStorage local cache + write-ahead log (WAL)
 │   ├── notifications/
 │   │   └── index.ts                   # expo-notifications: schedule, cancel, handle responses
 │   ├── openfda/
