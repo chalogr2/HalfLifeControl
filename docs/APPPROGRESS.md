@@ -836,6 +836,33 @@ Addressed findings from automated code review pass:
 - **Day detail completion**: Only counts scheduled pills due on that specific day of week
 - **Extra reads eliminated**: `initializeDashboardIfNeeded` checks cache before Firestore (0 reads on repeat opens). `appendToHistory` uses cache-only read since `arrayUnion` handles the remote append
 
+### Defensive Bloat Prevention (2026-03-31)
+
+**Problem**: The single-document vault pattern stores all pills + active doses in one Firestore doc (1 MiB limit). Without guardrails, the document could grow unbounded over years.
+
+**Size budget** (documented in `pills.ts` header):
+- Typical dashboard: 5–15 KB (5–10 pills + 5–10 active doses)
+- Monthly history doc: 45–270 KB (5 pills × 1–3 doses/day × 30 days)
+- 1 MiB limit allows ~3,300 pills or ~3,300 active doses — far beyond real usage
+
+**Measures implemented**:
+
+1. **Background sync pruning** (`loadDashboard` in `pills.ts`):
+   - Expired active doses (`eliminationAt` in the past or status !== 'active') are removed from both cache and Firestore
+   - Pills inactive for 6+ months (`isActive === false` and `updatedAt` older than 6 months) are pruned from Firestore
+   - Pruned data is written back to Firestore on each app open via `setDoc`
+
+2. **Firestore index exemptions** (`firestore.indexes.json`):
+   - Disabled auto-indexing on `pills`, `activeDoses` (in `data` collection), and `doses` (in `history` collection)
+   - These array fields are never queried individually — the entire document is always read
+   - Saves storage and write costs
+
+3. **Minimal object shapes**: Dose and pill objects carry only essential fields (~300 bytes each)
+
+**Files changed**:
+- `src/services/firebase/pills.ts` — pruning logic in `loadDashboard`, size budget comment
+- `firestore.indexes.json` — index exemptions for array fields
+
 ### TypeScript Verification
 
 Ran `npx tsc --noEmit` — **0 errors**.

@@ -1,0 +1,20 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "data",
+      "fieldPath": "pills",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "data",
+      "fieldPath": "activeDoses",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "history",
+      "fieldPath": "doses",
+      "indexes": []
+    }
+  ]
+}

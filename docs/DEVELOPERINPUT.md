@@ -84,11 +84,18 @@ service cloud.firestore {
 
 ---
 
-### 4. ~~Firestore Composite Indexes~~ — NO LONGER NEEDED
+### 4. Deploy Firestore Index Exemptions
 
-The optimized single-document schema does not use compound queries. All pills and active doses are in one document (`users/{uid}/data/dashboard`) and history is bucketed by month (`users/{uid}/history/YYYY-MM`). No composite indexes are required.
+The project includes `firestore.indexes.json` in the repo root. This file disables auto-indexing on array fields (`pills`, `activeDoses`, `doses`) that are never queried individually — saving storage and write costs.
 
-**Status**: [x] Not needed (optimized schema)
+**Action**: Deploy the index config to your Firebase project:
+```bash
+firebase deploy --only firestore:indexes
+```
+
+**Prerequisite**: You need the Firebase CLI installed (`npm install -g firebase-tools`) and logged in (`firebase login`). If you haven't initialized Firebase in this project yet, run `firebase init firestore` and select your project — but **do not** overwrite `firestore.indexes.json` when prompted.
+
+**Status**: [ ] Index exemptions deployed
 
 ---
 

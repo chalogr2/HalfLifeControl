@@ -5,6 +5,14 @@
  *   users/{uid}/data/dashboard   → all pills + active doses (1 read per app open)
  *   users/{uid}/history/{YYYY-MM} → all doses for a month (1 read per month)
  *
+ * SIZE BUDGET (Firestore 1 MiB doc limit):
+ *   Pill ~300 bytes, Dose ~300 bytes.
+ *   Dashboard: 20 pills + 30 active doses ≈ 15 KB (1.5% of limit).
+ *   Monthly history: 30 doses/day × 31 days ≈ 270 KB (26% of limit).
+ *   Headroom is enormous. Do NOT add unrelated data to these documents.
+ *   Background sync prunes expired active doses and pills inactive 6+ months.
+ *   See firestore.indexes.json for index exemptions on array fields.
+ *
  * Write strategy (hybrid WAL — multi-device safe):
  *
  *   APPENDS (addPill, addDose, addHistoryDose) — 0 reads, 1 write:
@@ -221,11 +229,34 @@ export async function loadDashboard(
         return;
       }
 
-      // Clean up eliminated doses
+      // ── Housekeeping: prune stale data from Firestore ──
+      // Without this, expired doses and long-inactive pills accumulate
+      // in the dashboard doc forever. Run on every background sync.
       const now = new Date();
+      const sixMonthsAgo = new Date(now);
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const beforeDoses = remote.activeDoses.length;
+      const beforePills = remote.pills.length;
+
+      // Remove expired/dismissed doses
       remote.activeDoses = remote.activeDoses.filter(
         (d) => d.eliminationAt > now && d.status === 'active',
       );
+      // Remove pills that have been inactive for 6+ months
+      remote.pills = remote.pills.filter(
+        (p) => p.isActive || p.updatedAt > sixMonthsAgo,
+      );
+
+      const pruned =
+        remote.activeDoses.length < beforeDoses ||
+        remote.pills.length < beforePills;
+
+      // Write pruned data back to Firestore so stale entries don't accumulate
+      if (pruned) {
+        await setDoc(dashboardRef(uid), toFirestoreDashboard(remote))
+          .catch(captureException);
+      }
 
       // Update cache with fresh remote data
       await setCachedDashboard(uid, serializeDashboard(remote));
