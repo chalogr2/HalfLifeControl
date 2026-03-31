@@ -28,7 +28,10 @@ export function CountdownTimer({ takenAt, halfLifeMinutes, color }: CountdownTim
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityLabel={`${timeLabel} remaining, ${Math.round(concentration)}% concentration`}
+    >
       <ProgressRing progress={progress} label={timeLabel} color={color} />
       <Typography variant="labelSm" color="onSurfaceVariant" style={styles.pct}>
         {Math.round(concentration)}%

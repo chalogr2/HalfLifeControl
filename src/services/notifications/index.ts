@@ -6,6 +6,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { Pill } from '@/core/types';
+import { captureException } from '@/services/sentry';
 
 // ─── Configuration ───────────────────────────────────
 
@@ -111,13 +112,17 @@ export async function cancelAllReminders(): Promise<void> {
  * Schedule reminders for all active scheduled pills.
  */
 export async function scheduleAllPillReminders(pills: Pill[]): Promise<void> {
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) return;
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return;
 
-  for (const pill of pills) {
-    if (pill.pillType === 'scheduled' && pill.isActive && pill.schedule) {
-      await schedulePillReminder(pill);
+    for (const pill of pills) {
+      if (pill.pillType === 'scheduled' && pill.isActive && pill.schedule) {
+        await schedulePillReminder(pill);
+      }
     }
+  } catch (error) {
+    captureException(error);
   }
 }
 

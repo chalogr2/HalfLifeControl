@@ -23,3 +23,4 @@ export {
   fetchDosesByDateRange,
 } from './pills';
 export type { DoseHistoryPage } from './pills';
+export { signInWithGoogle, isGoogleCancellation } from './googleAuth';

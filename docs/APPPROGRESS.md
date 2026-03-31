@@ -677,12 +677,60 @@ Ran `npx tsc --noEmit` — **0 errors**.
 
 ---
 
-## What Needs To Happen Next
+## Phase 6: Google Sign-In + Sentry + Accessibility + Android Build
 
-### Phase 6: Social Auth + Native Firebase Migration
-1. **Google Sign-In** + **Apple Sign-In** (enable disabled buttons)
-2. **@react-native-firebase** migration for FCM push notifications
-3. **Firestore offline persistence** via native SDK
+**Completed**: 2026-03-31
+
+### What Was Built
+
+1. **Google Sign-In** (`src/services/firebase/googleAuth.ts`)
+   - `signInWithGoogle()` — native Google Sign-In via `@react-native-google-signin/google-signin`
+   - Exchanges Google ID token for Firebase credential via `signInWithCredential` + `GoogleAuthProvider`
+   - Creates Firestore user profile on first Google sign-in (same flow as email registration)
+   - `isGoogleCancellation()` — helper to distinguish user cancel from real errors
+   - Graceful degradation: warns and disables when `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` not set
+
+2. **Auth screens updated** (`login.tsx`, `register.tsx`)
+   - Google button now functional with loading state
+   - Apple button marked "iOS only" with disabled state (deferred to Phase 7)
+
+3. **Sentry crash reporting** (`src/services/sentry/index.ts`)
+   - `initSentry()` — initializes with DSN from env var, skips if not configured
+   - `setSentryUser()` / `clearSentryUser()` — tracks authenticated user
+   - `captureException()` / `captureMessage()` / `addBreadcrumb()` — error reporting utilities
+   - `wrapRootComponent()` — wraps root layout when Sentry is active
+   - Integrated into root `_layout.tsx` (init + user tracking)
+   - Error capture added to `pills.ts` (Firestore writes) and `notifications/index.ts` (scheduling)
+
+4. **Accessibility pass** — all screens
+   - `accessibilityRole` on every `Pressable` (button, radio, checkbox, link, progressbar)
+   - `accessibilityState` for selected/checked states on radio buttons, checkboxes, toggles
+   - `accessibilityLabel` with descriptive text on all interactive elements
+   - `accessibilityHint` on PillCard for action guidance
+   - `accessibilityValue` on ProgressRing for screen readers
+   - Screens covered: login, register, forgot-password, welcome, dashboard, history, day detail, settings, paywall, add pill
+
+5. **Build configuration**
+   - `app.json`: Added `googleServicesFile` for Android, Google Sign-In + Sentry plugins
+   - `eas.json`: Added `emulator` build profile for Android emulator testing
+   - `.env.example`: Added `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+
+### Architectural Decision: @react-native-firebase Deferred
+
+The `@react-native-firebase` migration was **intentionally deferred**. Rationale:
+- Firebase JS SDK v12 handles all current needs (Auth, Firestore, real-time listeners)
+- Local notifications via `expo-notifications` cover the pill reminder use case
+- The migration would touch virtually every file and risk regressions across all features
+- Google Sign-In works without native Firebase (uses `signInWithCredential` from JS SDK)
+- FCM push notifications are only needed when Cloud Functions are built (future phase)
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**.
+
+---
+
+## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission
 
@@ -693,7 +741,7 @@ All screens must match the Stitch HTML mockups in `docs/stitch_halflifecontrol_h
 
 The design system documentation is in `docs/stitch_halflifecontrol_html/vitality_clear/DESIGN.md`.
 
-### Key Patterns Established in Phase 1–5
+### Key Patterns Established in Phase 1–6
 - **Import paths**: Always use `@/` alias (e.g., `import { colors } from '@/theme'`)
 - **Styling**: Use `StyleSheet.create()` with theme tokens, never hardcode colors/sizes
 - **Components**: Use `Typography`, `Button`, `Card`, `Input` from `@/components/ui`; pill components from `@/components/pills`
@@ -709,11 +757,13 @@ The design system documentation is in `docs/stitch_halflifecontrol_html/vitality
 - **Dynamic routes**: Use `[param].tsx` for dynamic segments (e.g., `[date].tsx` for day detail)
 - **Notifications**: Use `src/services/notifications/` — schedule in dashboard effect, handle taps via response handler
 - **Subscription gating**: Check `canAddScheduledPill()` at action time, redirect to paywall if blocked
-- **Service degradation**: RevenueCat service returns safe defaults when API keys aren't configured
+- **Service degradation**: RevenueCat, Google Sign-In, and Sentry all gracefully degrade when API keys aren't configured
+- **Accessibility**: Every Pressable has `accessibilityRole` + `accessibilityLabel`; radio/checkbox elements include `accessibilityState`
+- **Error capture**: `captureException()` from `@/services/sentry` wraps critical service operations
 
 ---
 
-## File Inventory (Phase 5 Complete)
+## File Inventory (Phase 6 Complete)
 
 ```
 src/
@@ -771,11 +821,14 @@ src/
 │   │   ├── index.ts                   # Barrel export (auth + pills + history)
 │   │   ├── config.ts                  # Firebase app/auth/db initialization
 │   │   ├── auth.ts                    # Auth + completeOnboarding + updateUserSettings
-│   │   └── pills.ts                   # Pill/dose CRUD + real-time subs + history queries
+│   │   ├── googleAuth.ts             # Google Sign-In via @react-native-google-signin + Firebase credential
+│   │   └── pills.ts                   # Pill/dose CRUD + real-time subs + history queries + Sentry
 │   ├── notifications/
 │   │   └── index.ts                   # expo-notifications: schedule, cancel, handle responses
 │   ├── openfda/
 │   │   └── index.ts                   # openFDA Drug Label API client with caching
+│   ├── sentry/
+│   │   └── index.ts                   # Sentry init, captureException, user tracking, wrapRootComponent
 │   └── subscription/
 │       └── index.ts                   # RevenueCat wrapper: init, purchase, restore, tier check
 ├── stores/
@@ -810,7 +863,7 @@ Root config files:
 └── .env.example                       # Template for required env vars
 ```
 
-## Dependencies Installed (through Phase 5)
+## Dependencies Installed (through Phase 6)
 
 ```json
 {
@@ -833,6 +886,8 @@ Root config files:
     "react-native-screens": "~4.23.0",
     "react-native-svg": "^15.15.4",
     "expo-notifications": "~55.0.14",
+    "@react-native-google-signin/google-signin": "^16.1.2",
+    "@sentry/react-native": "~7.11.0",
     "react-native-purchases": "^9.15.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"

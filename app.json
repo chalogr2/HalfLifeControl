@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.halflifecontrol.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#004d64",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -30,13 +31,26 @@
       "bundler": "metro"
     },
     "plugins": [
-      ["expo-router", { "root": "./src/app" }],
+      [
+        "expo-router",
+        {
+          "root": "./src/app"
+        }
+      ],
       "expo-font",
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#004d64"
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "SENTRY_ORG",
+          "project": "SENTRY_PROJECT"
         }
       ]
     ]

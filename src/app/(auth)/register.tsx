@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { signUp } from '@/services/firebase/auth';
+import { signInWithGoogle, isGoogleCancellation } from '@/services/firebase/googleAuth';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 export default function RegisterScreen() {
@@ -23,6 +24,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
@@ -60,6 +62,20 @@ export default function RegisterScreen() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const profile = await signInWithGoogle();
+      setUser(profile);
+    } catch (err: unknown) {
+      if (!isGoogleCancellation(err)) {
+        Alert.alert('Google Sign-In Failed', 'Something went wrong. Please try again.');
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -120,6 +136,9 @@ export default function RegisterScreen() {
               <Pressable
                 style={styles.termsRow}
                 onPress={() => setAgreedToTerms(!agreedToTerms)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreedToTerms }}
+                accessibilityLabel="I agree to the Terms of Service and Privacy Policy"
               >
                 <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
                   {agreedToTerms && (
@@ -162,16 +181,30 @@ export default function RegisterScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social buttons — disabled for now */}
+            {/* Social sign-in */}
             <View style={styles.socialRow}>
-              <Pressable style={styles.socialButton} disabled>
+              <Pressable
+                style={[styles.socialButton, styles.socialButtonEnabled]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Sign up with Google"
+              >
                 <Typography variant="labelLg" color="onSurface">
-                  Google
+                  {googleLoading ? 'Signing in...' : 'Google'}
                 </Typography>
               </Pressable>
-              <Pressable style={styles.socialButton} disabled>
-                <Typography variant="labelLg" color="onSurface">
+              <Pressable
+                style={styles.socialButton}
+                disabled
+                accessibilityRole="button"
+                accessibilityLabel="Sign up with Apple, available on iOS"
+              >
+                <Typography variant="labelLg" color="outline">
                   Apple
+                </Typography>
+                <Typography variant="labelSm" color="outline">
+                  iOS only
                 </Typography>
               </Pressable>
             </View>
@@ -182,7 +215,11 @@ export default function RegisterScreen() {
             <Typography variant="bodyLg" color="onSurfaceVariant">
               Already have an account?{' '}
             </Typography>
-            <Pressable onPress={() => router.back()}>
+            <Pressable
+              onPress={() => router.back()}
+              accessibilityRole="link"
+              accessibilityLabel="Go to login screen"
+            >
               <Typography variant="bodyLg" color="primary" style={styles.bold}>
                 Login
               </Typography>
@@ -275,6 +312,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerLow,
     borderRadius: borderRadius.xl,
     opacity: 0.5,
+  },
+  socialButtonEnabled: {
+    opacity: 1,
   },
   footer: {
     flexDirection: 'row',

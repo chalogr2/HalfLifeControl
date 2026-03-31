@@ -24,7 +24,8 @@ export function PillCard({ pill, activeDose, nextDoseLabel, onPress }: PillCardP
       onPress={onPress}
       style={({ pressed }) => pressed && styles.pressed}
       accessibilityRole="button"
-      accessibilityLabel={`${pill.drugName} pill card`}
+      accessibilityLabel={`${pill.drugName}, ${pill.dosageMg} ${pill.dosageUnit}${activeDose ? ', currently tracking' : ''}${nextDoseLabel ? `, ${nextDoseLabel}` : ''}`}
+      accessibilityHint={activeDose ? 'Currently tracking this dose' : 'Double tap to record a dose'}
     >
       <Card variant={variant} accentColor={pill.color}>
         <View style={styles.row}>

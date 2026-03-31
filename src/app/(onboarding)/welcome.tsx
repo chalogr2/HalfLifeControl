@@ -49,6 +49,8 @@ export default function WelcomeScreen() {
         <Pressable
           style={({ pressed }) => [styles.optionCard, pressed && styles.optionPressed]}
           onPress={handleScheduled}
+          accessibilityRole="button"
+          accessibilityLabel="Yes, I take pills on a schedule. Set up your daily routine."
         >
           <View style={styles.optionContent}>
             <Typography variant="titleMd" color="onSurface">
@@ -64,6 +66,8 @@ export default function WelcomeScreen() {
         <Pressable
           style={({ pressed }) => [styles.optionCard, styles.optionCardSecondary, pressed && styles.optionPressed]}
           onPress={handleRandom}
+          accessibilityRole="button"
+          accessibilityLabel="No, I just want to track a pill now. Quick entry for occasional relief."
         >
           <View style={styles.optionContent}>
             <Typography variant="titleMd" color="onSurface">
@@ -78,7 +82,12 @@ export default function WelcomeScreen() {
       </View>
 
       {/* Login link */}
-      <Pressable onPress={() => router.replace('/(auth)/login')} style={styles.loginLink}>
+      <Pressable
+        onPress={() => router.replace('/(auth)/login')}
+        style={styles.loginLink}
+        accessibilityRole="link"
+        accessibilityLabel="Already have an account? Log in"
+      >
         <Typography variant="bodyMd" color="onSurfaceVariant">
           Already have an account?{' '}
         </Typography>

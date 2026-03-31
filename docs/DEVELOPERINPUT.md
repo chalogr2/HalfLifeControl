@@ -197,19 +197,123 @@ Code is built and gracefully degrades without API keys. You need to set up Reven
 
 ---
 
-### Phase 6: Social Auth + Sentry
+### Phase 6: Google Sign-In + Sentry + Android Build — Code complete, needs account setup
 
-| Item | Status |
-|------|--------|
-| Google OAuth client ID configured in Firebase | [ ] |
-| Apple Sign-In enabled in Firebase + Apple Developer portal | [ ] |
-| Sentry account + project created | [ ] |
-| `EXPO_PUBLIC_SENTRY_DSN` in `.env` | [ ] |
-| Social login buttons enabled in `login.tsx` and `register.tsx` | [ ] |
+Google Sign-In code is built. Apple Sign-In is deferred to Phase 7 (no Mac). Sentry service gracefully degrades when DSN not set.
 
-Currently disabled at:
-- `src/app/(auth)/login.tsx:128-136` (Google + Apple buttons, `disabled` prop)
-- `src/app/(auth)/register.tsx:165-173` (Google + Apple buttons, `disabled` prop)
+#### 13. Enable Google Sign-In in Firebase Console
+
+1. Go to **Firebase Console > Authentication > Sign-in method**
+2. Click **Google** > Enable it
+3. Note the **Web client ID** — this is shown in the Google provider config
+
+**Action**: Paste the Web client ID into `.env` as:
+```
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=123456789-abc.apps.googleusercontent.com
+```
+
+**File that reads this**: `src/services/firebase/googleAuth.ts` (line 18)
+
+**Status**: [ ] Google Sign-In enabled in Firebase / [ ] Web client ID in `.env`
+
+---
+
+#### 14. Download `google-services.json` (REQUIRED for Android build)
+
+The Google Sign-In native module requires `google-services.json` in the project root.
+
+1. Go to **Firebase Console > Project Settings > General > Your apps**
+2. If no Android app exists, click **Add app** > Android
+   - Package name: `com.halflifecontrol.app`
+   - Debug signing certificate SHA-1: get it from EAS with `eas credentials` or from your local debug keystore
+3. Download `google-services.json` and place it in the **project root** (next to `package.json`)
+
+**Important**: You MUST add the SHA-1 fingerprint for Google Sign-In to work on Android. Without it, the sign-in will fail silently.
+
+To get your debug SHA-1 from Android Studio:
+```bash
+# Windows (default debug keystore)
+keytool -list -v -keystore "%USERPROFILE%\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android
+```
+
+Or from EAS:
+```bash
+eas credentials --platform android
+```
+
+**Status**: [ ] `google-services.json` placed / [ ] SHA-1 fingerprint added to Firebase
+
+---
+
+#### 15. Create Sentry project
+
+1. Create a free account at **sentry.io**
+2. Create a **React Native** project
+3. Copy the **DSN** string
+4. Add to `.env`: `EXPO_PUBLIC_SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz`
+5. Update `app.json` — replace `"SENTRY_ORG"` and `"SENTRY_PROJECT"` in the `@sentry/react-native/expo` plugin config with your actual org slug and project slug
+
+**File that reads DSN**: `src/services/sentry/index.ts` (line 7)
+
+**Status**: [ ] Sentry account created / [ ] DSN in `.env` / [ ] app.json org/project updated
+
+---
+
+#### 16. App Icon Assets (REQUIRED for build)
+
+The `app.json` references these icon files. The build will fail if they don't exist:
+
+| File | Dimensions | Purpose |
+|------|-----------|---------|
+| `assets/icon.png` | 1024x1024 | App icon (iOS + fallback) |
+| `assets/splash-icon.png` | Any (centered) | Splash screen logo |
+| `assets/android-icon-foreground.png` | 1024x1024 | Android adaptive icon foreground |
+| `assets/android-icon-background.png` | 1024x1024 | Android adaptive icon background |
+| `assets/android-icon-monochrome.png` | 1024x1024 | Android themed icon (API 33+) |
+| `assets/favicon.png` | 48x48 | Web favicon |
+
+**Quick fix for testing**: Copy a single 1024x1024 placeholder PNG to all these names. You can replace them with final designs before store submission.
+
+**Status**: [ ] All icon assets present in `assets/`
+
+---
+
+#### 17. Build and Run on Android Emulator
+
+**Prerequisites** (complete items 1, 13, 14, 16 above first):
+
+1. **Install Android Studio** + create an AVD (Android Virtual Device):
+   - Recommended: Pixel 7 or similar, API 34+
+   - Give the emulator at least 4GB RAM
+
+2. **Log in to EAS**:
+   ```bash
+   npx eas-cli login
+   ```
+
+3. **Build the development APK**:
+   ```bash
+   npx eas build --platform android --profile development
+   ```
+   This builds in the cloud (takes ~10-15 minutes first time). Downloads an `.apk` file.
+
+4. **Start the emulator** from Android Studio > Device Manager
+
+5. **Install the APK**:
+   ```bash
+   adb install path/to/your-build.apk
+   ```
+
+6. **Start the dev server**:
+   ```bash
+   npx expo start --dev-client
+   ```
+
+7. Open the app on the emulator — it connects to the dev server for hot reload.
+
+**Important**: This app uses native modules (`react-native-purchases`, `expo-notifications`, `@react-native-google-signin/google-signin`, `@sentry/react-native`) and **cannot run in Expo Go**. You must use an EAS development build.
+
+**Status**: [ ] EAS logged in / [ ] APK built / [ ] Running on emulator
 
 ---
 
@@ -236,6 +340,9 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=        # Firebase Console > Web app config
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=    # Firebase Console > Web app config
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID= # Firebase Console > Web app config
 EXPO_PUBLIC_FIREBASE_APP_ID=            # Firebase Console > Web app config
+
+# Phase 6 — needed for Google Sign-In
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=       # Firebase Console > Auth > Google provider > Web client ID
 
 # Phase 5 — needed for subscriptions
 EXPO_PUBLIC_REVENUECAT_APPLE_KEY=       # RevenueCat > Project > API Keys

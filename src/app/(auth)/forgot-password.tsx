@@ -97,7 +97,11 @@ export default function ForgotPasswordScreen() {
 
           {!sent && (
             <View style={styles.footer}>
-              <Pressable onPress={() => router.back()}>
+              <Pressable
+                onPress={() => router.back()}
+                accessibilityRole="link"
+                accessibilityLabel="Back to login"
+              >
                 <Typography variant="bodyLg" color="primary" style={styles.bold}>
                   Back to Login
                 </Typography>

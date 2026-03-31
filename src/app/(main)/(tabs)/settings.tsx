@@ -66,6 +66,9 @@ export default function SettingsScreen() {
               key={opt.value}
               onPress={() => handleReminderChange(opt.value)}
               style={({ pressed }) => pressed && styles.pressed}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: reminderMode === opt.value }}
+              accessibilityLabel={`${opt.title}. ${opt.description}`}
             >
               <Card
                 variant={reminderMode === opt.value ? 'outlined' : 'elevated'}
@@ -97,6 +100,8 @@ export default function SettingsScreen() {
           <Pressable
             style={styles.proCard}
             onPress={() => router.push('/(main)/subscription/paywall')}
+            accessibilityRole="button"
+            accessibilityLabel="Upgrade to Pro. Unlock unlimited scheduled pills and future features."
           >
             <View style={styles.proCardContent}>
               <Typography variant="titleMd" color="onPrimary">Upgrade to Pro</Typography>
@@ -119,12 +124,20 @@ export default function SettingsScreen() {
         )}
 
         {/* Legal */}
-        <Pressable style={styles.legalBtn}>
+        <Pressable
+          style={styles.legalBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Terms of Service"
+        >
           <Typography variant="bodyLg" color="onSurface">Terms of Service</Typography>
           <Typography variant="bodyLg" color="onSurfaceVariant">›</Typography>
         </Pressable>
 
-        <Pressable style={styles.legalBtn}>
+        <Pressable
+          style={styles.legalBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Privacy Policy"
+        >
           <Typography variant="bodyLg" color="onSurface">Privacy Policy</Typography>
           <Typography variant="bodyLg" color="onSurfaceVariant">›</Typography>
         </Pressable>
@@ -137,7 +150,12 @@ export default function SettingsScreen() {
         </View>
 
         {/* Sign out */}
-        <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
+        <Pressable
+          style={styles.signOutBtn}
+          onPress={handleSignOut}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
           <Typography variant="labelLg" color="error">Sign Out</Typography>
         </Pressable>
       </ScrollView>

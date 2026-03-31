@@ -114,6 +114,9 @@ export default function PaywallScreen() {
               activePkg === annualPkg && styles.planCardActive,
             ]}
             onPress={() => setSelectedPkg(annualPkg)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: activePkg === annualPkg }}
+            accessibilityLabel={`Annual plan, ${annualPkg ? annualPkg.product.priceString : '$39.99'} per year, best value`}
           >
             <View style={styles.bestValueBadge}>
               <Typography variant="labelSm" color="onPrimary">BEST VALUE</Typography>
@@ -146,6 +149,9 @@ export default function PaywallScreen() {
               activePkg === monthlyPkg && styles.planCardActive,
             ]}
             onPress={() => setSelectedPkg(monthlyPkg)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: activePkg === monthlyPkg }}
+            accessibilityLabel={`Monthly plan, ${monthlyPkg ? monthlyPkg.product.priceString : '$4.99'} per month, cancel anytime`}
           >
             <View style={styles.planRow}>
               <View style={styles.radioOuter}>
@@ -176,10 +182,18 @@ export default function PaywallScreen() {
           loading={purchasing}
         />
         <View style={styles.bottomLinks}>
-          <Pressable onPress={handleRestore}>
+          <Pressable
+            onPress={handleRestore}
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchase"
+          >
             <Typography variant="labelMd" color="primary">Restore purchase</Typography>
           </Pressable>
-          <Pressable onPress={() => router.back()}>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with free plan"
+          >
             <Typography variant="labelMd" color="onSurfaceVariant">Continue with Free</Typography>
           </Pressable>
         </View>

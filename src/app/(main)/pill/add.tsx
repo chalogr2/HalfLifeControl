@@ -143,7 +143,12 @@ export default function AddPillScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel and go back"
+          >
             <Typography variant="bodyLg" color="primary">Cancel</Typography>
           </Pressable>
           <Typography variant="titleLg">Refined Add Medication V2</Typography>
@@ -216,6 +221,9 @@ export default function AddPillScreen() {
                 <Pressable
                   style={[styles.unitBtn, halfLifeUnit === 'hours' && styles.unitBtnActive]}
                   onPress={() => setHalfLifeUnit('hours')}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: halfLifeUnit === 'hours' }}
+                  accessibilityLabel="Hours"
                 >
                   <Typography
                     variant="labelMd"
@@ -227,6 +235,9 @@ export default function AddPillScreen() {
                 <Pressable
                   style={[styles.unitBtn, halfLifeUnit === 'minutes' && styles.unitBtnActive]}
                   onPress={() => setHalfLifeUnit('minutes')}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: halfLifeUnit === 'minutes' }}
+                  accessibilityLabel="Minutes"
                 >
                   <Typography
                     variant="labelMd"
@@ -259,6 +270,9 @@ export default function AddPillScreen() {
                 key={opt.value}
                 style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
                 onPress={() => setFrequency(opt.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: frequency === opt.value }}
+                accessibilityLabel={opt.label}
               >
                 <Typography
                   variant="labelMd"
@@ -282,6 +296,9 @@ export default function AddPillScreen() {
                     key={i}
                     style={[styles.dayBtn, daysOfWeek.includes(i) && styles.dayBtnActive]}
                     onPress={() => toggleDay(i)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: daysOfWeek.includes(i) }}
+                    accessibilityLabel={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]}
                   >
                     <Typography
                       variant="labelMd"
@@ -332,6 +349,9 @@ export default function AddPillScreen() {
                   selectedColor === c && styles.colorDotSelected,
                 ]}
                 onPress={() => setSelectedColor(c)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: selectedColor === c }}
+                accessibilityLabel={`Pill color ${c}`}
               />
             ))}
           </View>

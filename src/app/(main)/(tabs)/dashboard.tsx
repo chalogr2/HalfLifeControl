@@ -117,7 +117,11 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Typography variant="headlineMd">My Daily Stack</Typography>
-        <Pressable style={styles.avatar}>
+        <Pressable
+          style={styles.avatar}
+          accessibilityRole="button"
+          accessibilityLabel="User profile"
+        >
           <Typography variant="labelLg" color="onPrimary">
             {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
           </Typography>
@@ -148,6 +152,8 @@ export default function DashboardScreen() {
               <Pressable
                 style={styles.addToStack}
                 onPress={() => router.push('/(main)/pill/add?type=scheduled')}
+                accessibilityRole="button"
+                accessibilityLabel="Add pill to stack"
               >
                 <Typography variant="labelLg" color="primary">
                   + Add pill to stack
@@ -157,6 +163,8 @@ export default function DashboardScreen() {
               <Pressable
                 style={styles.addToStack}
                 onPress={() => router.push('/(main)/pill/add?type=random')}
+                accessibilityRole="button"
+                accessibilityLabel="Track another pill"
               >
                 <Typography variant="labelLg" color="primary">
                   + Track another pill

@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import { eliminationDate } from '@/core/halflife';
+import { captureException } from '@/services/sentry';
 import type { Pill, Dose, DoseSource } from '@/core/types';
 
 // ─── Helpers ──────────────────────────────────────────
@@ -45,12 +46,17 @@ export async function addPill(
   userId: string,
   pill: Omit<Pill, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
-  const ref = await addDoc(pillsRef(userId), {
-    ...pill,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return ref.id;
+  try {
+    const ref = await addDoc(pillsRef(userId), {
+      ...pill,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return ref.id;
+  } catch (error) {
+    captureException(error);
+    throw error;
+  }
 }
 
 export async function updatePill(
@@ -112,19 +118,24 @@ export async function recordDose(
   source: DoseSource,
   scheduledFor?: Date | null,
 ): Promise<string> {
-  const elimAt = eliminationDate(takenAt, pill.halfLifeMinutes);
-  const ref = await addDoc(dosesRef(userId), {
-    pillId: pill.id,
-    drugName: pill.drugName,
-    takenAt: Timestamp.fromDate(takenAt),
-    scheduledFor: scheduledFor ? Timestamp.fromDate(scheduledFor) : null,
-    halfLifeMinutes: pill.halfLifeMinutes,
-    eliminationAt: Timestamp.fromDate(elimAt),
-    status: 'active',
-    source,
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
+  try {
+    const elimAt = eliminationDate(takenAt, pill.halfLifeMinutes);
+    const ref = await addDoc(dosesRef(userId), {
+      pillId: pill.id,
+      drugName: pill.drugName,
+      takenAt: Timestamp.fromDate(takenAt),
+      scheduledFor: scheduledFor ? Timestamp.fromDate(scheduledFor) : null,
+      halfLifeMinutes: pill.halfLifeMinutes,
+      eliminationAt: Timestamp.fromDate(elimAt),
+      status: 'active',
+      source,
+      createdAt: serverTimestamp(),
+    });
+    return ref.id;
+  } catch (error) {
+    captureException(error);
+    throw error;
+  }
 }
 
 export async function updateDoseStatus(

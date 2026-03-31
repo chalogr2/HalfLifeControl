@@ -14,8 +14,7 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 // Initialize auth — Firebase JS SDK v12 handles persistence automatically
-// in React Native via AsyncStorage when available. We'll migrate to
-// @react-native-firebase in Phase 4 for full native integration.
+// in React Native via AsyncStorage when available.
 let auth: ReturnType<typeof getAuth>;
 try {
   auth = initializeAuth(app);

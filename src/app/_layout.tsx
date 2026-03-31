@@ -8,7 +8,16 @@ import { StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import { onAuthChanged, getUserProfile } from '@/services/firebase/auth';
+import {
+  initSentry,
+  setSentryUser,
+  clearSentryUser,
+  wrapRootComponent,
+} from '@/services/sentry';
 import { colors } from '@/theme';
+
+// Initialize Sentry as early as possible
+initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,13 +31,16 @@ function useFirebaseAuthListener() {
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           setUser(profile);
+          setSentryUser(firebaseUser.uid, profile.email);
           // Initialize RevenueCat with the user's ID
           initSubscriptions(firebaseUser.uid);
         } catch {
           setUser(null);
+          clearSentryUser();
         }
       } else {
         setUser(null);
+        clearSentryUser();
       }
     });
     return unsubscribe;
@@ -61,7 +73,7 @@ function AuthGate() {
   return <Slot />;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded] = useFonts({
     Lexend: require('../../assets/fonts/Lexend-Regular.ttf'),
     'Lexend-Light': require('../../assets/fonts/Lexend-Light.ttf'),
@@ -94,6 +106,8 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapRootComponent(RootLayout);
 
 const styles = StyleSheet.create({
   container: {

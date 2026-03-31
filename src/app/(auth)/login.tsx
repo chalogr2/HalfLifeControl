@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
-import { signIn, getUserProfile } from '@/services/firebase/auth';
+import { signIn } from '@/services/firebase/auth';
+import { signInWithGoogle, isGoogleCancellation } from '@/services/firebase/googleAuth';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 export default function LoginScreen() {
@@ -22,6 +23,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   function validate(): boolean {
@@ -50,6 +52,20 @@ export default function LoginScreen() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const profile = await signInWithGoogle();
+      setUser(profile);
+    } catch (err: unknown) {
+      if (!isGoogleCancellation(err)) {
+        Alert.alert('Google Sign-In Failed', 'Something went wrong. Please try again.');
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -92,7 +108,11 @@ export default function LoginScreen() {
                   <Typography variant="labelLg" color="primary">
                     Password
                   </Typography>
-                  <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
+                  <Pressable
+                    onPress={() => router.push('/(auth)/forgot-password')}
+                    accessibilityRole="link"
+                    accessibilityLabel="Forgot password"
+                  >
                     <Typography variant="labelLg" color="primary">
                       Forgot Password?
                     </Typography>
@@ -125,16 +145,30 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social buttons — disabled for now, enabled in Phase 6 */}
+            {/* Social sign-in */}
             <View style={styles.socialRow}>
-              <Pressable style={styles.socialButton} disabled>
+              <Pressable
+                style={[styles.socialButton, styles.socialButtonEnabled]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in with Google"
+              >
                 <Typography variant="labelLg" color="onSurface">
-                  Google
+                  {googleLoading ? 'Signing in...' : 'Google'}
                 </Typography>
               </Pressable>
-              <Pressable style={styles.socialButton} disabled>
-                <Typography variant="labelLg" color="onSurface">
+              <Pressable
+                style={styles.socialButton}
+                disabled
+                accessibilityRole="button"
+                accessibilityLabel="Sign in with Apple, available on iOS"
+              >
+                <Typography variant="labelLg" color="outline">
                   Apple
+                </Typography>
+                <Typography variant="labelSm" color="outline">
+                  iOS only
                 </Typography>
               </Pressable>
             </View>
@@ -145,7 +179,11 @@ export default function LoginScreen() {
             <Typography variant="bodyLg" color="onSurfaceVariant">
               Don't have an account?{' '}
             </Typography>
-            <Pressable onPress={() => router.push('/(auth)/register')}>
+            <Pressable
+              onPress={() => router.push('/(auth)/register')}
+              accessibilityRole="link"
+              accessibilityLabel="Go to register screen"
+            >
               <Typography variant="bodyLg" color="primary" style={styles.bold}>
                 Register
               </Typography>
@@ -223,6 +261,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerLow,
     borderRadius: borderRadius.xl,
     opacity: 0.5,
+  },
+  socialButtonEnabled: {
+    opacity: 1,
   },
   footer: {
     flexDirection: 'row',

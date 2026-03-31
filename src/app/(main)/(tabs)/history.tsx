@@ -151,6 +151,9 @@ export default function HistoryScreen() {
           <Pressable
             onPress={() => handleDayPress(item.dateKey)}
             style={({ pressed }) => pressed && styles.pressed}
+            accessibilityRole="button"
+            accessibilityLabel={`${isToday(item.dateKey) ? 'Today' : item.label}, ${item.pillsTaken} pills taken, ${item.uniquePills} medications`}
+            accessibilityHint="View day detail"
           >
             <Card variant="elevated" style={styles.dayCard}>
               <View style={styles.dayHeader}>

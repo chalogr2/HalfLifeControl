@@ -103,7 +103,12 @@ export default function DayDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <Typography variant="bodyLg" color="primary">Back</Typography>
           </Pressable>
           <Typography variant="headlineMd">{date ? formatDayTitle(date) : 'Day Detail'}</Typography>
