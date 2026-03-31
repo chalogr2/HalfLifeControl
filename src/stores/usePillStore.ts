@@ -9,6 +9,7 @@ import {
   updateDoseStatus as fbUpdateDoseStatus,
   initializeDashboardIfNeeded,
 } from '@/services/firebase/pills';
+import { cancelPillReminders } from '@/services/notifications';
 
 interface PillState {
   pills: Pill[];
@@ -80,6 +81,8 @@ export const usePillStore = create<PillState>((set) => ({
   },
 
   deletePill: async (userId, pillId) => {
+    // Cancel scheduled notifications for this pill before deleting
+    await cancelPillReminders(pillId).catch(() => {});
     const dashboard = await fbDeletePill(userId, pillId);
     applyDashboard(set, dashboard);
   },

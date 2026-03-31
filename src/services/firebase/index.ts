@@ -8,6 +8,7 @@ export {
   onAuthChanged,
   completeOnboarding,
   updateUserSettings,
+  updateSubscriptionTier,
 } from './auth';
 export {
   loadDashboard,

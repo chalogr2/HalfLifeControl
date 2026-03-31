@@ -818,6 +818,24 @@ The original schema used individual Firestore documents per pill and dose, with 
 - `src/services/cache/index.ts` — WAL types (`WriteOperation` discriminated union), `enqueueWrite`, `dequeueWrite`, `getWriteQueue`, `hasPendingWrites`
 - `src/services/firebase/pills.ts` — `executeOperation()` dispatches by op type, `enqueueAndAttempt()` is the common WAL wrapper, `flushWriteQueue()` retries on app open
 
+### Code Review Fixes (2026-03-31)
+
+Addressed findings from automated code review pass:
+
+**Critical/High:**
+- **WAL ordering**: All write paths now enqueue to WAL *before* updating local cache, preventing orphaned optimistic state on app kill
+- **Subscription tier Firestore sync**: `useSubscriptionStore` now writes `subscriptionTier` to Firestore on purchase, restore, and tier changes via `updateSubscriptionTier()`. Security rules can now correctly gate on this field
+- **RevenueCat state leak**: Subscription service uses `Purchases.logIn()` on user switch and `Purchases.logOut()` on sign-out. Store cleans up listener on reset
+- **Onboarding "No" branch**: Now marks onboarding complete and routes to dashboard instead of entering add-pill flow. AuthGate also handles `(onboarding)` group redirect
+- **"Start Tracking" records dose**: Random pills now call `recordDose()` after creation so countdown starts immediately
+- **Add pill success routing**: After first pill during onboarding, navigates to dashboard instead of `router.back()`
+
+**Medium:**
+- **Notification cleanup**: `deletePill` cancels scheduled reminders. `signOut` cancels all reminders
+- **History adherence**: Calculates against actual date range span (earliest dose to today), not just days with entries
+- **Day detail completion**: Only counts scheduled pills due on that specific day of week
+- **Extra reads eliminated**: `initializeDashboardIfNeeded` checks cache before Firestore (0 reads on repeat opens). `appendToHistory` uses cache-only read since `arrayUnion` handles the remote append
+
 ### TypeScript Verification
 
 Ran `npx tsc --noEmit` — **0 errors**.

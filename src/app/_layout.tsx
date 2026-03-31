@@ -26,6 +26,7 @@ SplashScreen.preventAutoHideAsync();
 function useFirebaseAuthListener() {
   const { setUser, setLoading } = useAuthStore();
   const initSubscriptions = useSubscriptionStore((s) => s.init);
+  const resetSubscriptions = useSubscriptionStore((s) => s.reset);
   const initPills = usePillStore((s) => s.init);
   const resetPills = usePillStore((s) => s.reset);
 
@@ -46,6 +47,7 @@ function useFirebaseAuthListener() {
       } else {
         setUser(null);
         resetPills();
+        resetSubscriptions();
         clearSentryUser();
       }
     });
@@ -64,6 +66,7 @@ function AuthGate() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inOnboardingGroup = segments[0] === '(onboarding)';
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
@@ -73,6 +76,9 @@ function AuthGate() {
       } else {
         router.replace('/(main)/(tabs)/dashboard');
       }
+    } else if (isAuthenticated && inOnboardingGroup && user?.onboardingComplete) {
+      // User completed onboarding (e.g. added first pill) — redirect to dashboard
+      router.replace('/(main)/(tabs)/dashboard');
     }
   }, [isAuthenticated, isLoading, segments]);
 

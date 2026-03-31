@@ -21,16 +21,29 @@ const ENTITLEMENT_ID = 'pro';
 
 let initialized = false;
 
-/** Initialize RevenueCat. Call once at app startup. */
+/** Initialize RevenueCat for a specific user. Re-initializes on user switch. */
 export async function initSubscriptions(userId: string): Promise<void> {
   const apiKey = Platform.OS === 'ios' ? APPLE_KEY : ANDROID_KEY;
   if (!apiKey) return; // No key configured — skip initialization
 
-  if (initialized) return;
+  if (!initialized) {
+    Purchases.setLogLevel(LOG_LEVEL.ERROR);
+    await Purchases.configure({ apiKey, appUserID: userId });
+    initialized = true;
+  } else {
+    // Already configured — switch to new user identity
+    await Purchases.logIn(userId);
+  }
+}
 
-  Purchases.setLogLevel(LOG_LEVEL.ERROR);
-  await Purchases.configure({ apiKey, appUserID: userId });
-  initialized = true;
+/** Reset RevenueCat state on sign-out. */
+export async function resetSubscriptions(): Promise<void> {
+  if (!initialized) return;
+  try {
+    await Purchases.logOut();
+  } catch {
+    // logOut throws if already anonymous — safe to ignore
+  }
 }
 
 /** Check if the user has an active Pro subscription. */

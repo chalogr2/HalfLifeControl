@@ -1,21 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Button } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { completeOnboarding } from '@/services/firebase/auth';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const [skipping, setSkipping] = useState(false);
 
   const handleScheduled = () => {
     // Navigate to add pill flow (scheduled mode)
     router.push('/(main)/pill/add?type=scheduled');
   };
 
-  const handleRandom = () => {
-    // Navigate to add pill flow (one-time mode)
-    router.push('/(main)/pill/add?type=random');
+  const handleSkipToDashboard = async () => {
+    // "No" → mark onboarding complete, go straight to dashboard
+    if (!user || skipping) return;
+    setSkipping(true);
+    try {
+      await completeOnboarding(user.uid);
+      useAuthStore.getState().setUser({ ...user, onboardingComplete: true });
+      router.replace('/(main)/(tabs)/dashboard');
+    } finally {
+      setSkipping(false);
+    }
   };
 
   return (
@@ -65,16 +77,17 @@ export default function WelcomeScreen() {
 
         <Pressable
           style={({ pressed }) => [styles.optionCard, styles.optionCardSecondary, pressed && styles.optionPressed]}
-          onPress={handleRandom}
+          onPress={handleSkipToDashboard}
+          disabled={skipping}
           accessibilityRole="button"
-          accessibilityLabel="No, I just want to track a pill now. Quick entry for occasional relief."
+          accessibilityLabel="No, skip to dashboard. You can add pills later."
         >
           <View style={styles.optionContent}>
             <Typography variant="titleMd" color="onSurface">
-              No, I just want to track a pill now
+              No, I'll add pills later
             </Typography>
             <Typography variant="bodyMd" color="onSurfaceVariant">
-              Quick entry for occasional relief
+              Skip to your dashboard
             </Typography>
           </View>
           <Typography variant="titleLg" color="primary">›</Typography>

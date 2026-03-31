@@ -41,6 +41,10 @@ export async function signIn(email: string, password: string): Promise<UserProfi
 
 export async function signOut(): Promise<void> {
   const uid = auth.currentUser?.uid;
+  // Cancel all scheduled notifications before signing out
+  // so stale reminders don't fire for the previous account
+  const { cancelAllReminders } = await import('@/services/notifications');
+  await cancelAllReminders().catch(() => {});
   await firebaseSignOut(auth);
   if (uid) await clearUserCache(uid).catch(() => {});
 }
@@ -78,6 +82,13 @@ export async function updateUserSettings(
   settings: Record<string, any>,
 ): Promise<void> {
   await updateDoc(doc(db, 'users', uid), { settings });
+}
+
+export async function updateSubscriptionTier(
+  uid: string,
+  tier: 'free' | 'pro',
+): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { subscriptionTier: tier });
 }
 
 export function onAuthChanged(callback: (user: User | null) => void) {

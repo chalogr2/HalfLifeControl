@@ -77,13 +77,25 @@ export default function DayDetailScreen() {
     return Array.from(groups.entries()).map(([label, d]) => ({ label, doses: d }));
   }, [doses]);
 
-  // Completion: scheduled pills taken / total scheduled pills
-  const scheduledPills = pills.filter((p) => p.pillType === 'scheduled');
+  // Completion: scheduled pills due this day / taken this day
+  const actualDayOfWeek = date ? (() => {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  })() : new Date().getDay();
+
+  const scheduledPillsDueToday = pills.filter((p) => {
+    if (p.pillType !== 'scheduled' || !p.schedule) return false;
+    if (p.schedule.frequency === 'daily') return true;
+    if (p.schedule.frequency === 'specific_days') {
+      return p.schedule.daysOfWeek?.includes(actualDayOfWeek) ?? false;
+    }
+    return false;
+  });
   const scheduledTaken = doses.filter((d) =>
-    scheduledPills.some((p) => p.id === d.pillId),
+    scheduledPillsDueToday.some((p) => p.id === d.pillId),
   ).length;
-  const completionPct = scheduledPills.length > 0
-    ? Math.round((scheduledTaken / scheduledPills.length) * 100)
+  const completionPct = scheduledPillsDueToday.length > 0
+    ? Math.round((scheduledTaken / scheduledPillsDueToday.length) * 100)
     : doses.length > 0 ? 100 : 0;
 
   const getPillColor = (pillId: string): string => {
@@ -123,7 +135,7 @@ export default function DayDetailScreen() {
           </View>
           <ProgressRing
             progress={1 - completionPct / 100}
-            label={`${scheduledTaken}/${scheduledPills.length || doses.length}`}
+            label={`${scheduledTaken}/${scheduledPillsDueToday.length || doses.length}`}
             size={80}
             strokeWidth={8}
             color={colors.primary}

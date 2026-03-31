@@ -80,11 +80,21 @@ export default function HistoryScreen() {
       });
   }, [allDoses]);
 
-  // Adherence = days with at least 1 dose / total days in range
+  // Adherence = days with at least 1 dose / total days in date range
   const adherencePercent = useMemo(() => {
     if (dayGroups.length === 0) return 0;
-    const totalDays = dayGroups.length;
-    const daysWithDoses = dayGroups.filter((g) => g.pillsTaken > 0).length;
+    // Calculate the actual date range span (first dose to today)
+    const sortedKeys = dayGroups.map((g) => g.dateKey).sort();
+    const earliest = sortedKeys[0];
+    const [y, m, d] = earliest.split('-').map(Number);
+    const startDate = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const totalDays = Math.max(
+      1,
+      Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+    );
+    const daysWithDoses = dayGroups.length;
     return Math.round((daysWithDoses / totalDays) * 100);
   }, [dayGroups]);
 

@@ -369,8 +369,12 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
 // ─── WAL helper: enqueue + attempt ──────────────────
 
 /**
- * Common pattern: update cache → enqueue operation → attempt Firestore write → dequeue on success.
- * The caller never sees an error — the write is guaranteed to eventually reach Firestore.
+ * Common pattern: enqueue operation → update cache → attempt Firestore write → dequeue on success.
+ *
+ * Order matters: WAL enqueue happens BEFORE cache update, so a crash between
+ * the two can't leave optimistic local state without a corresponding WAL entry.
+ * If we crash after enqueue but before cache, the WAL still syncs on next open
+ * and the background Firestore fetch updates the cache.
  */
 async function enqueueAndAttempt(
   uid: string,
@@ -409,14 +413,12 @@ export async function addPill(
   dashboard.pills.push(newPill);
   dashboard.updatedAt = now;
 
-  // Cache immediately
-  await setCachedDashboard(uid, serializeDashboard(dashboard));
-
-  // arrayUnion: 0 reads, 1 write
+  // WAL first (survives app kill), then cache
   await enqueueAndAttempt(uid, {
     op: 'addPill',
     pill: JSON.stringify(serializePill(newPill)),
   });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   return { id: newPill.id, dashboard };
 }
@@ -432,17 +434,14 @@ export async function updatePill(
   dashboard.pills[idx] = { ...dashboard.pills[idx], ...data, updatedAt: new Date() };
   dashboard.updatedAt = new Date();
 
-  // Cache immediately
-  await setCachedDashboard(uid, serializeDashboard(dashboard));
-
-  // Transaction: 1 read, 1 write
-  // Store only the primitive fields (no Dates) — updatedAt is set fresh during flush
+  // WAL first, then cache
   const { updatedAt: _drop, ...walData } = data;
   await enqueueAndAttempt(uid, {
     op: 'updatePill',
     pillId,
     data: JSON.stringify(walData),
   });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   return dashboard;
 }
@@ -459,11 +458,9 @@ export async function deletePill(uid: string, pillId: string): Promise<Dashboard
   dashboard.activeDoses = dashboard.activeDoses.filter((d) => d.pillId !== pillId);
   dashboard.updatedAt = new Date();
 
-  // Cache immediately
-  await setCachedDashboard(uid, serializeDashboard(dashboard));
-
-  // Transaction: 1 read, 1 write
+  // WAL first, then cache
   await enqueueAndAttempt(uid, { op: 'deletePill', pillId });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   return dashboard;
 }
@@ -498,16 +495,14 @@ export async function recordDose(
   dashboard.activeDoses.push(newDose);
   dashboard.updatedAt = now;
 
-  // Cache immediately
-  await setCachedDashboard(uid, serializeDashboard(dashboard));
-
   const serializedDose = serializeDose(newDose);
 
-  // arrayUnion to dashboard: 0 reads, 1 write
+  // WAL first (both dashboard + history), then cache
   await enqueueAndAttempt(uid, {
     op: 'addDose',
     dose: JSON.stringify(serializedDose),
   });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   // arrayUnion to monthly history: 0 reads, 1 write
   await appendToHistory(uid, newDose);
@@ -531,11 +526,9 @@ export async function updateDoseStatus(
   }
   dashboard.updatedAt = new Date();
 
-  // Cache immediately
-  await setCachedDashboard(uid, serializeDashboard(dashboard));
-
-  // Transaction: 1 read, 1 write
+  // WAL first, then cache
   await enqueueAndAttempt(uid, { op: 'removeDose', doseId });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   return dashboard;
 }
@@ -550,8 +543,18 @@ export async function updateDoseStatus(
 async function appendToHistory(uid: string, dose: Dose): Promise<void> {
   const month = toMonthKey(dose.takenAt);
 
-  // Update local cache
-  const history = await getMonthHistory(uid, month);
+  // WAL first, then cache
+  await enqueueAndAttempt(uid, {
+    op: 'addHistoryDose',
+    month,
+    dose: JSON.stringify(serializeDose(dose)),
+  });
+
+  // Update local cache after WAL is persisted.
+  // Use cache-only read (no Firestore) — arrayUnion handles the remote append.
+  // If cache is cold for this month, start with empty; the next background sync
+  // will populate the full history.
+  const history = await getCachedMonthHistory(uid, month);
   history.doses.push(dose);
   history.updatedAt = new Date();
   await setCachedHistory(uid, month, JSON.stringify({
@@ -559,17 +562,10 @@ async function appendToHistory(uid: string, dose: Dose): Promise<void> {
     doses: history.doses.map(serializeDose),
     updatedAt: history.updatedAt.toISOString(),
   }));
-
-  // arrayUnion: 0 reads, 1 write
-  await enqueueAndAttempt(uid, {
-    op: 'addHistoryDose',
-    month,
-    dose: JSON.stringify(serializeDose(dose)),
-  });
 }
 
-async function getMonthHistory(uid: string, month: string): Promise<MonthlyHistoryDocument> {
-  // Try cache
+/** Cache-only month history — no Firestore read. For use in write paths. */
+async function getCachedMonthHistory(uid: string, month: string): Promise<MonthlyHistoryDocument> {
   try {
     const json = await getCachedHistory(uid, month);
     if (json) {
@@ -583,6 +579,13 @@ async function getMonthHistory(uid: string, month: string): Promise<MonthlyHisto
   } catch {
     // Cache miss
   }
+  return { month, doses: [], updatedAt: new Date() };
+}
+
+async function getMonthHistory(uid: string, month: string): Promise<MonthlyHistoryDocument> {
+  // Try cache first
+  const cached = await getCachedMonthHistory(uid, month);
+  if (cached.doses.length > 0) return cached;
 
   // Fetch from Firestore (1 read)
   const snap = await getDoc(historyRef(uid, month));
@@ -671,8 +674,13 @@ async function getCurrentDashboard(uid: string): Promise<DashboardDocument> {
 // (Can be called once to migrate data from old schema to new)
 
 export async function initializeDashboardIfNeeded(uid: string): Promise<boolean> {
+  // Check cache first — if we have cached data, the doc definitely exists (0 reads)
+  const cached = await getCachedDashboard(uid).catch(() => null);
+  if (cached) return false;
+
+  // Cache miss — check Firestore (1 read, only on first-ever app open)
   const snap = await getDoc(dashboardRef(uid));
-  if (snap.exists()) return false; // Already migrated
+  if (snap.exists()) return false;
 
   // Create empty dashboard document
   const empty = emptyDashboard();

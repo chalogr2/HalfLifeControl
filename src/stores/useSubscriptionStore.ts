@@ -7,7 +7,10 @@ import {
   purchasePackage,
   restorePurchases,
   onSubscriptionChange,
+  resetSubscriptions,
 } from '@/services/subscription';
+import { updateSubscriptionTier } from '@/services/firebase/auth';
+import { captureException } from '@/services/sentry';
 import type { PurchasesPackage } from 'react-native-purchases';
 
 /** Max scheduled pills on free tier. */
@@ -20,6 +23,8 @@ interface SubscriptionState {
 
   /** Initialize RevenueCat and fetch current tier + offerings. */
   init: (userId: string) => Promise<void>;
+  /** Reset state on sign-out. Cleans up listener and RevenueCat identity. */
+  reset: () => void;
   /** Purchase a package from the paywall. */
   purchase: (pkg: PurchasesPackage) => Promise<void>;
   /** Restore previous purchases. */
@@ -28,12 +33,30 @@ interface SubscriptionState {
   canAddScheduledPill: (currentScheduledCount: number) => boolean;
 }
 
+let cleanupListener: (() => void) | null = null;
+let currentUserId: string | null = null;
+
+/**
+ * Sync tier change to Firestore so security rules can gate on subscriptionTier.
+ * Fire-and-forget — don't block the UI on this write.
+ */
+function syncTierToFirestore(uid: string, tier: SubscriptionTier): void {
+  updateSubscriptionTier(uid, tier).catch(captureException);
+}
+
 export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   tier: 'free',
   packages: [],
   isLoading: true,
 
   init: async (userId: string) => {
+    // Clean up previous listener if switching users
+    if (cleanupListener) {
+      cleanupListener();
+      cleanupListener = null;
+    }
+
+    currentUserId = userId;
     set({ isLoading: true });
     try {
       await initSubscriptions(userId);
@@ -43,16 +66,33 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       ]);
       set({ tier, packages, isLoading: false });
 
-      // Listen for future changes
-      onSubscriptionChange((newTier) => set({ tier: newTier }));
+      // Sync initial tier to Firestore
+      syncTierToFirestore(userId, tier);
+
+      // Listen for future changes (single listener, cleaned up on reset)
+      cleanupListener = onSubscriptionChange((newTier) => {
+        set({ tier: newTier });
+        if (currentUserId) syncTierToFirestore(currentUserId, newTier);
+      });
     } catch {
       set({ tier: 'free', packages: [], isLoading: false });
     }
   },
 
+  reset: () => {
+    if (cleanupListener) {
+      cleanupListener();
+      cleanupListener = null;
+    }
+    currentUserId = null;
+    resetSubscriptions();
+    set({ tier: 'free', packages: [], isLoading: true });
+  },
+
   purchase: async (pkg: PurchasesPackage) => {
     const tier = await purchasePackage(pkg);
     set({ tier });
+    if (currentUserId) syncTierToFirestore(currentUserId, tier);
   },
 
   restore: async () => {
@@ -60,6 +100,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       const tier = await restorePurchases();
       set({ tier, isLoading: false });
+      if (currentUserId) syncTierToFirestore(currentUserId, tier);
     } catch {
       set({ isLoading: false });
     }

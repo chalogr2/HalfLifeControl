@@ -25,6 +25,7 @@ export default function AddPillScreen() {
   const params = useLocalSearchParams<{ type?: string }>();
   const user = useAuthStore((s) => s.user);
   const addPill = usePillStore((s) => s.addPill);
+  const recordDose = usePillStore((s) => s.recordDose);
   const pills = usePillStore((s) => s.pills);
   const canAddScheduledPill = useSubscriptionStore((s) => s.canAddScheduledPill);
   const scheduledCount = pills.filter((p) => p.pillType === 'scheduled').length;
@@ -105,7 +106,7 @@ export default function AddPillScreen() {
           }
         : null;
 
-      await addPill(user.uid, {
+      const pillId = await addPill(user.uid, {
         drugName: drugName.trim(),
         drugId: '',
         halfLifeMinutes,
@@ -117,6 +118,17 @@ export default function AddPillScreen() {
         color: selectedColor,
         isActive: true,
       });
+
+      // For random pills ("Track a pill I just took"), record a dose immediately
+      // so the countdown timer starts
+      if (effectivePillType === 'random') {
+        await recordDose(
+          user.uid,
+          { id: pillId, drugName: drugName.trim(), halfLifeMinutes },
+          new Date(),
+          'manual',
+        );
+      }
 
       // Mark onboarding complete after first pill added
       if (user && !user.onboardingComplete) {
@@ -135,7 +147,13 @@ export default function AddPillScreen() {
 
   const handleSuccessDismiss = () => {
     setShowSuccess(false);
-    router.back();
+    // After onboarding, the AuthGate will redirect to dashboard
+    // when onboardingComplete becomes true. For normal add-pill, go back.
+    if (user?.onboardingComplete) {
+      router.back();
+    } else {
+      router.replace('/(main)/(tabs)/dashboard');
+    }
   };
 
   return (
