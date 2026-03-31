@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './config';
+import { clearUserCache } from '@/services/cache';
 import type { UserProfile } from '@/core/types';
 
 export async function signUp(email: string, password: string): Promise<UserProfile> {
@@ -39,7 +40,9 @@ export async function signIn(email: string, password: string): Promise<UserProfi
 }
 
 export async function signOut(): Promise<void> {
+  const uid = auth.currentUser?.uid;
   await firebaseSignOut(auth);
+  if (uid) await clearUserCache(uid).catch(() => {});
 }
 
 export async function resetPassword(email: string): Promise<void> {

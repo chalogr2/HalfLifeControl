@@ -1,24 +1,25 @@
 import { create } from 'zustand';
-import type { Pill, Dose, DoseSource } from '@/core/types';
+import type { Pill, Dose, DoseSource, DashboardDocument } from '@/core/types';
 import {
+  loadDashboard,
   addPill as fbAddPill,
   updatePill as fbUpdatePill,
   deletePill as fbDeletePill,
-  subscribePills,
   recordDose as fbRecordDose,
   updateDoseStatus as fbUpdateDoseStatus,
-  subscribeActiveDoses,
+  initializeDashboardIfNeeded,
 } from '@/services/firebase/pills';
-import type { Unsubscribe } from 'firebase/firestore';
 
 interface PillState {
   pills: Pill[];
   activeDoses: Dose[];
   isLoading: boolean;
 
-  // Subscription management
-  subscribe: (userId: string) => void;
-  unsubscribe: () => void;
+  /** Load from cache instantly, then sync from Firestore. */
+  init: (userId: string) => Promise<void>;
+
+  /** Reset state on sign-out. */
+  reset: () => void;
 
   // Pills
   addPill: (userId: string, pill: Omit<Pill, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -35,50 +36,62 @@ interface PillState {
   dismissDose: (userId: string, doseId: string) => Promise<void>;
 }
 
-let unsubs: Unsubscribe[] = [];
+function applyDashboard(set: (partial: Partial<PillState>) => void, data: DashboardDocument) {
+  set({
+    pills: data.pills.filter((p) => p.isActive),
+    activeDoses: data.activeDoses,
+  });
+}
 
 export const usePillStore = create<PillState>((set) => ({
   pills: [],
   activeDoses: [],
   isLoading: true,
 
-  subscribe: (userId: string) => {
+  init: async (userId: string) => {
     set({ isLoading: true });
 
-    const unsubPills = subscribePills(userId, (pills) => {
-      set({ pills, isLoading: false });
+    // Ensure the dashboard document exists
+    await initializeDashboardIfNeeded(userId);
+
+    // Load from cache (instant), then sync from Firestore in background
+    const cached = await loadDashboard(userId, (synced) => {
+      // Background sync callback — update store with fresh Firestore data
+      applyDashboard(set, synced);
     });
 
-    const unsubDoses = subscribeActiveDoses(userId, (activeDoses) => {
-      set({ activeDoses });
-    });
-
-    unsubs = [unsubPills, unsubDoses];
+    applyDashboard(set, cached);
+    set({ isLoading: false });
   },
 
-  unsubscribe: () => {
-    unsubs.forEach((u) => u());
-    unsubs = [];
+  reset: () => {
     set({ pills: [], activeDoses: [], isLoading: true });
   },
 
   addPill: async (userId, pill) => {
-    return fbAddPill(userId, pill);
+    const { id, dashboard } = await fbAddPill(userId, pill);
+    applyDashboard(set, dashboard);
+    return id;
   },
 
   updatePill: async (userId, pillId, data) => {
-    await fbUpdatePill(userId, pillId, data);
+    const dashboard = await fbUpdatePill(userId, pillId, data);
+    applyDashboard(set, dashboard);
   },
 
   deletePill: async (userId, pillId) => {
-    await fbDeletePill(userId, pillId);
+    const dashboard = await fbDeletePill(userId, pillId);
+    applyDashboard(set, dashboard);
   },
 
   recordDose: async (userId, pill, takenAt, source) => {
-    return fbRecordDose(userId, pill, takenAt, source);
+    const { id, dashboard } = await fbRecordDose(userId, pill, takenAt, source);
+    applyDashboard(set, dashboard);
+    return id;
   },
 
   dismissDose: async (userId, doseId) => {
-    await fbUpdateDoseStatus(userId, doseId, 'dismissed');
+    const dashboard = await fbUpdateDoseStatus(userId, doseId, 'dismissed');
+    applyDashboard(set, dashboard);
   },
 }));

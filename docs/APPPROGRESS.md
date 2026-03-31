@@ -730,6 +730,58 @@ Ran `npx tsc --noEmit` — **0 errors**.
 
 ---
 
+## Data Optimization: Local-First + Single-Document Schema
+
+**Completed**: 2026-03-31
+
+### Problem
+
+The original schema used individual Firestore documents per pill and dose, with real-time `onSnapshot` listeners running continuously. This caused:
+- Hundreds of document reads per user per day (each app open re-read all pills + all doses)
+- Unnecessary real-time listeners for data that only changes on user action
+- Linear cost scaling with user count
+
+### Solution: Single-Document Vault + Monthly Bucketing + Cache-First
+
+**New Firestore Schema:**
+- `users/{uid}/data/dashboard` — single document containing all pills + active doses
+- `users/{uid}/history/{YYYY-MM}` — one document per month containing all doses for that month
+
+**Cache-First Strategy:**
+- `src/services/cache/index.ts` — AsyncStorage-based local cache
+- On app open: load from cache instantly (0 Firestore reads), sync from Firestore in background (1 read)
+- On write: update cache immediately, push to Firestore (SDK queues if offline)
+- On sign-out: clear local cache
+
+**Cost Impact:**
+| Metric | Before | After |
+|--------|--------|-------|
+| App open reads | 10-20+ (N pills + N doses) | 1 (single dashboard doc) |
+| Real-time listeners | 2 continuous | 0 |
+| Record dose | 1 write | 2 writes (dashboard + monthly bucket) |
+| View month history | N reads (individual dose docs) | 1 read (monthly bucket doc) |
+| Cost at 10K DAU | ~$50-100/mo | ~$5/mo |
+
+**Files Changed:**
+- `src/services/firebase/pills.ts` — complete rewrite for single-doc + monthly buckets
+- `src/stores/usePillStore.ts` — replaced subscription model with cache-first init
+- `src/services/cache/index.ts` — new AsyncStorage cache layer
+- `src/core/types.ts` — added `DashboardDocument`, `MonthlyHistoryDocument`, `generateId()`
+- `src/services/firebase/auth.ts` — clears cache on sign-out
+- `src/services/firebase/index.ts` — updated exports
+- `src/app/_layout.tsx` — initializes pill store on auth
+- `src/app/(main)/(tabs)/dashboard.tsx` — removed subscribe/unsubscribe
+- `src/app/(main)/(tabs)/history.tsx` — adapted to new fetchDoseHistory API
+- `docs/DEVELOPERINPUT.md` — updated Firestore security rules with pill limit enforcement
+
+**Security: Pill limit enforced at database level** — Firestore rules now check `subscriptionTier` and reject writes that add pills beyond the free limit, preventing client-side bypass.
+
+### TypeScript Verification
+
+Ran `npx tsc --noEmit` — **0 errors**.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission
@@ -750,7 +802,8 @@ The design system documentation is in `docs/stitch_halflifecontrol_html/vitality
 - **Navigation**: Expo Router file-based routing — `(tabs)` for tab screens, `pill/` and `history/` as Stack overlays
 - **Auth gating**: Handled automatically by root `_layout.tsx` — no need to check auth in individual screens
 - **Pure core logic**: `src/core/` has zero React/Firebase imports — pure TypeScript math and scheduling
-- **Real-time subscriptions**: Use Firestore `onSnapshot` listeners in stores, clean up on unmount
+- **Cache-first data**: Load from AsyncStorage instantly, sync from Firestore in background. No real-time listeners.
+- **Single-document vault**: All pills + active doses in one Firestore doc. Monthly history bucketed per month.
 - **Countdown pattern**: Calculate from absolute timestamps on each tick — no drift, instant catch-up on foreground
 - **Drug search**: 3-tier: curated DB (instant) → openFDA (async fallback) → manual entry (always available)
 - **Modal screens**: Use `presentation: 'modal'` in Stack.Screen options for overlay screens like add pill
@@ -822,7 +875,9 @@ src/
 │   │   ├── config.ts                  # Firebase app/auth/db initialization
 │   │   ├── auth.ts                    # Auth + completeOnboarding + updateUserSettings
 │   │   ├── googleAuth.ts             # Google Sign-In via @react-native-google-signin + Firebase credential
-│   │   └── pills.ts                   # Pill/dose CRUD + real-time subs + history queries + Sentry
+│   │   └── pills.ts                   # Single-doc CRUD + monthly history buckets + cache-first
+│   ├── cache/
+│   │   └── index.ts                   # AsyncStorage local cache for dashboard + history
 │   ├── notifications/
 │   │   └── index.ts                   # expo-notifications: schedule, cancel, handle responses
 │   ├── openfda/

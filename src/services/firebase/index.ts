@@ -10,17 +10,14 @@ export {
   updateUserSettings,
 } from './auth';
 export {
+  loadDashboard,
   addPill,
   updatePill,
   deletePill,
-  fetchPills,
-  subscribePills,
   recordDose,
   updateDoseStatus,
-  fetchActiveDoses,
-  subscribeActiveDoses,
   fetchDoseHistory,
   fetchDosesByDateRange,
+  initializeDashboardIfNeeded,
 } from './pills';
-export type { DoseHistoryPage } from './pills';
 export { signInWithGoogle, isGoogleCancellation } from './googleAuth';

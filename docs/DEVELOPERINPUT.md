@@ -40,7 +40,7 @@ These are gitignored and must exist locally:
 
 ---
 
-### 3. Firestore Security Rules
+### 3. Firestore Security Rules (Updated for optimized schema)
 
 There is **no `firestore.rules` file** in the project. Your Firestore database currently uses whatever rules you set during setup (likely test mode which expires, or locked mode which blocks everything).
 
@@ -54,13 +54,23 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
-      // Users can only access their own pills
-      match /pills/{pillId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Dashboard document (single-doc vault: pills + active doses)
+      match /data/{docId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Enforce free tier pill limit at database level
+        allow write: if request.auth != null && request.auth.uid == userId
+          && (
+            // Pro users: no limit
+            get(/databases/$(database)/documents/users/$(userId)).data.subscriptionTier == 'pro'
+            // Free users: max 1 scheduled pill
+            || request.resource.data.pills.size() <= 1
+            // Allow writes that don't add scheduled pills (e.g. recording doses)
+            || request.resource.data.pills.size() <= resource.data.pills.size()
+          );
       }
 
-      // Users can only access their own doses
-      match /doses/{doseId} {
+      // Monthly history buckets
+      match /history/{monthId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
@@ -68,22 +78,17 @@ service cloud.firestore {
 }
 ```
 
+**Note**: The pill limit rule counts ALL pills in the array. Free users can have at most 1 pill total in their dashboard. Pro status is checked from the user profile document. The third condition allows writes that don't add new pills (e.g., recording a dose or removing a pill).
+
 **Status**: [ ] Rules deployed
 
 ---
 
-### 4. Firestore Composite Indexes
+### 4. ~~Firestore Composite Indexes~~ — NO LONGER NEEDED
 
-The history queries use compound `where` + `orderBy` which require composite indexes. Firestore will throw an error on first query with a direct link to create the index. You need to click those links or create manually:
+The optimized single-document schema does not use compound queries. All pills and active doses are in one document (`users/{uid}/data/dashboard`) and history is bucketed by month (`users/{uid}/history/YYYY-MM`). No composite indexes are required.
 
-| Collection | Fields | Query |
-|------------|--------|-------|
-| `users/{uid}/doses` | `status` ASC, `takenAt` DESC | Active doses on dashboard |
-| `users/{uid}/doses` | `takenAt` ASC | Date range query for day detail |
-
-**How**: Run the app, trigger the queries, check the console error for a Firebase link, click it.
-
-**Status**: [ ] Indexes created
+**Status**: [x] Not needed (optimized schema)
 
 ---
 

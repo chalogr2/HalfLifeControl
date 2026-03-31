@@ -19,14 +19,7 @@ interface Section {
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { pills, activeDoses, isLoading, subscribe, unsubscribe, recordDose } = usePillStore();
-
-  useEffect(() => {
-    if (user?.uid) {
-      subscribe(user.uid);
-      return () => unsubscribe();
-    }
-  }, [user?.uid]);
+  const { pills, activeDoses, isLoading, recordDose } = usePillStore();
 
   // Schedule notifications when pills change
   useEffect(() => {

@@ -7,7 +7,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
+import { usePillStore } from '@/stores/usePillStore';
 import { onAuthChanged, getUserProfile } from '@/services/firebase/auth';
+import { clearUserCache } from '@/services/cache';
 import {
   initSentry,
   setSentryUser,
@@ -24,6 +26,8 @@ SplashScreen.preventAutoHideAsync();
 function useFirebaseAuthListener() {
   const { setUser, setLoading } = useAuthStore();
   const initSubscriptions = useSubscriptionStore((s) => s.init);
+  const initPills = usePillStore((s) => s.init);
+  const resetPills = usePillStore((s) => s.reset);
 
   useEffect(() => {
     const unsubscribe = onAuthChanged(async (firebaseUser) => {
@@ -32,14 +36,16 @@ function useFirebaseAuthListener() {
           const profile = await getUserProfile(firebaseUser.uid);
           setUser(profile);
           setSentryUser(firebaseUser.uid, profile.email);
-          // Initialize RevenueCat with the user's ID
+          // Initialize stores — cache-first, then sync
           initSubscriptions(firebaseUser.uid);
+          initPills(firebaseUser.uid);
         } catch {
           setUser(null);
           clearSentryUser();
         }
       } else {
         setUser(null);
+        resetPills();
         clearSentryUser();
       }
     });

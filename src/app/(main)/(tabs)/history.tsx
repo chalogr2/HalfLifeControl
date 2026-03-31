@@ -6,6 +6,7 @@ import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { fetchDoseHistory } from '@/services/firebase/pills';
+import { captureException } from '@/services/sentry';
 import type { Dose } from '@/core/types';
 
 interface DayGroup {
@@ -43,8 +44,11 @@ export default function HistoryScreen() {
     (async () => {
       setLoading(true);
       try {
-        const page = await fetchDoseHistory(user.uid, 200);
-        if (!cancelled) setAllDoses(page.doses);
+        // Fetch last 3 months of history (3 reads max)
+        const doses = await fetchDoseHistory(user.uid, 3);
+        if (!cancelled) setAllDoses(doses);
+      } catch (err) {
+        captureException(err);
       } finally {
         if (!cancelled) setLoading(false);
       }

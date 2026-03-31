@@ -58,3 +58,36 @@ export interface UserProfile {
   subscriptionTier: SubscriptionTier;
   settings: UserSettings;
 }
+
+// ─── Firestore Document Schemas (Optimized) ─────────
+
+/**
+ * Single-document vault for the user's active state.
+ * Path: users/{uid}/data/dashboard
+ *
+ * 1 read per app open instead of N pills + N doses.
+ */
+export interface DashboardDocument {
+  pills: Pill[];
+  activeDoses: Dose[];
+  updatedAt: Date;
+}
+
+/**
+ * Monthly bucketed dose history.
+ * Path: users/{uid}/history/{YYYY-MM}
+ *
+ * 1 read per month of history instead of N individual dose docs.
+ */
+export interface MonthlyHistoryDocument {
+  month: string; // "YYYY-MM"
+  doses: Dose[];
+  updatedAt: Date;
+}
+
+/** Generate a unique ID for pills/doses (replaces Firestore auto-IDs). */
+export function generateId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 10);
+  return `${timestamp}_${random}`;
+}
