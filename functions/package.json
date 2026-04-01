@@ -1,7 +1,7 @@
 {
   "name": "halflifecontrol-functions",
   "description": "Cloud Functions for HalfLifeControl — subscription tier sync via RevenueCat webhook",
-  "main": "src/index.js",
+  "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
