@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Typography, Input } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { searchDrugs, type DrugEntry } from '@/data/drugDatabase';
@@ -106,34 +106,33 @@ export function DrugSearchBar({ onSelect, placeholder = 'Search or type a drug n
         <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
       )}
       {showResults && results.length > 0 && (
-        <View style={styles.dropdown}>
-          <FlatList
-            data={results}
-            keyExtractor={(item, i) => `${item.type}-${item.name}-${i}`}
-            keyboardShouldPersistTaps="handled"
-            style={styles.list}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [styles.resultItem, pressed && styles.pressed]}
-                onPress={() => handleSelect(item)}
-              >
-                <View style={styles.resultContent}>
-                  <Typography variant="bodyLg" color="onSurface" numberOfLines={1}>
-                    {item.name}
-                  </Typography>
-                  <Typography variant="labelMd" color="onSurfaceVariant" numberOfLines={1}>
-                    {item.subtitle}
-                  </Typography>
+        <ScrollView
+          style={styles.dropdown}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          {results.map((item, i) => (
+            <Pressable
+              key={`${item.type}-${item.name}-${i}`}
+              style={({ pressed }) => [styles.resultItem, pressed && styles.pressed]}
+              onPress={() => handleSelect(item)}
+            >
+              <View style={styles.resultContent}>
+                <Typography variant="bodyLg" color="onSurface" numberOfLines={1}>
+                  {item.name}
+                </Typography>
+                <Typography variant="labelMd" color="onSurfaceVariant" numberOfLines={1}>
+                  {item.subtitle}
+                </Typography>
+              </View>
+              {item.type === 'curated' && (
+                <View style={styles.badge}>
+                  <Typography variant="labelSm" color="onPrimary">HL</Typography>
                 </View>
-                {item.type === 'curated' && (
-                  <View style={styles.badge}>
-                    <Typography variant="labelSm" color="onPrimary">HL</Typography>
-                  </View>
-                )}
-              </Pressable>
-            )}
-          />
-        </View>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -155,9 +154,6 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
     maxHeight: 260,
     overflow: 'hidden',
-  },
-  list: {
-    maxHeight: 260,
   },
   resultItem: {
     flexDirection: 'row',

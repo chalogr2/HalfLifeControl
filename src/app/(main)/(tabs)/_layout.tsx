@@ -1,20 +1,7 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
-import { Typography } from '@/components/ui';
+import { StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '@/theme';
-
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  return (
-    <View style={styles.tabIcon}>
-      <Typography
-        variant="labelMd"
-        color={focused ? 'primary' : 'onSurfaceVariant'}
-      >
-        {label}
-      </Typography>
-    </View>
-  );
-}
 
 export default function TabsLayout() {
   return (
@@ -22,30 +9,36 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.onSurfaceVariant,
+        tabBarLabelStyle: styles.tabLabel,
       }}
     >
       <Tabs.Screen
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ focused }) => <TabIcon label="Dashboard" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="grid-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ focused }) => <TabIcon label="History" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ focused }) => <TabIcon label="Settings" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
@@ -60,8 +53,8 @@ const styles = StyleSheet.create({
     height: 64,
     paddingTop: spacing[2],
   },
-  tabIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

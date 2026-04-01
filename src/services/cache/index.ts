@@ -33,7 +33,7 @@ const KEYS = {
   writeQueue: (uid: string) => `@hlc:writeQueue:${uid}`,
 };
 
-const SECURE_STORE_KEY = '@hlc:aes_key';
+const SECURE_STORE_KEY = 'hlc_aes_key';
 
 // ─── Encryption Layer ──────────────────────────────────
 //
