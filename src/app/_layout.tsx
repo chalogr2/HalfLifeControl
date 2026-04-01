@@ -67,8 +67,9 @@ function AuthGate() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const inOnboardingGroup = segments[0] === '(onboarding)';
+    const inLegalScreen = segments[0] === 'legal';
 
-    if (!isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup && !inLegalScreen) {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
       if (user && !user.onboardingComplete) {

@@ -27,10 +27,18 @@ export default function AddPillScreen() {
   const addPill = usePillStore((s) => s.addPill);
   const recordDose = usePillStore((s) => s.recordDose);
   const pills = usePillStore((s) => s.pills);
+  const activeDoses = usePillStore((s) => s.activeDoses);
   const canAddScheduledPill = useSubscriptionStore((s) => s.canAddScheduledPill);
   const canAddRandomPill = useSubscriptionStore((s) => s.canAddRandomPill);
   const scheduledCount = pills.filter((p) => p.pillType === 'scheduled').length;
-  const randomCount = pills.filter((p) => p.pillType === 'random').length;
+  // Random slots are freed when the countdown completes (drug eliminated)
+  const now = Date.now();
+  const randomCount = pills.filter((p) => {
+    if (p.pillType !== 'random' || !p.isActive) return false;
+    return activeDoses.some(
+      (d) => d.pillId === p.id && d.status === 'active' && d.eliminationAt.getTime() > now,
+    );
+  }).length;
 
   // Form state
   const [drugName, setDrugName] = useState('');

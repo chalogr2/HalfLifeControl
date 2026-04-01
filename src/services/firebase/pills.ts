@@ -99,15 +99,25 @@ function countActiveScheduled(pills: Pill[]): number {
   return pills.filter((p) => p.isActive && p.pillType === 'scheduled').length;
 }
 
-function countActiveRandom(pills: Pill[]): number {
-  return pills.filter((p) => p.isActive && p.pillType === 'random').length;
+/**
+ * Count random pills currently consuming a slot: must have a non-eliminated
+ * active dose. Once the countdown completes, the slot is freed.
+ */
+function countActiveRandom(pills: Pill[], activeDoses: Dose[]): number {
+  const now = Date.now();
+  return pills.filter((p) => {
+    if (!p.isActive || p.pillType !== 'random') return false;
+    return activeDoses.some(
+      (d) => d.pillId === p.id && d.status === 'active' && d.eliminationAt.getTime() > now,
+    );
+  }).length;
 }
 
-/** Recompute all pill counters from the pills array. */
+/** Recompute all pill counters from the pills + activeDoses arrays. */
 function recomputeCounts(dashboard: DashboardDocument): void {
   dashboard.activePillCount = countActivePills(dashboard.pills);
   dashboard.activeScheduledCount = countActiveScheduled(dashboard.pills);
-  dashboard.activeRandomCount = countActiveRandom(dashboard.pills);
+  dashboard.activeRandomCount = countActiveRandom(dashboard.pills, dashboard.activeDoses);
 }
 
 function serializeDashboard(data: DashboardDocument): string {
@@ -124,13 +134,14 @@ function serializeDashboard(data: DashboardDocument): string {
 function deserializeDashboard(json: string): DashboardDocument {
   const raw = JSON.parse(json);
   const pills = (raw.pills ?? []).map(deserializePill);
+  const activeDoses: Dose[] = (raw.activeDoses ?? []).map(deserializeDose);
   return {
     pills,
-    activeDoses: (raw.activeDoses ?? []).map(deserializeDose),
+    activeDoses,
     // Recompute from pills if fields are missing (migration from old cache)
     activePillCount: raw.activePillCount ?? countActivePills(pills),
     activeScheduledCount: raw.activeScheduledCount ?? countActiveScheduled(pills),
-    activeRandomCount: raw.activeRandomCount ?? countActiveRandom(pills),
+    activeRandomCount: raw.activeRandomCount ?? countActiveRandom(pills, activeDoses),
     updatedAt: new Date(raw.updatedAt),
   };
 }
@@ -199,12 +210,13 @@ function toFirestoreDashboard(data: DashboardDocument): Record<string, any> {
 
 function parseDashboardDoc(docData: Record<string, any>): DashboardDocument {
   const pills = (docData.pills ?? []).map(deserializePill);
+  const activeDoses: Dose[] = (docData.activeDoses ?? []).map(deserializeDose);
   return {
     pills,
-    activeDoses: (docData.activeDoses ?? []).map(deserializeDose),
+    activeDoses,
     activePillCount: docData.activePillCount ?? countActivePills(pills),
     activeScheduledCount: docData.activeScheduledCount ?? countActiveScheduled(pills),
-    activeRandomCount: docData.activeRandomCount ?? countActiveRandom(pills),
+    activeRandomCount: docData.activeRandomCount ?? countActiveRandom(pills, activeDoses),
     updatedAt: toDate(docData.updatedAt),
   };
 }
