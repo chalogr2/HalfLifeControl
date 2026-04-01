@@ -15,13 +15,13 @@
  *
  * Write strategy (hybrid WAL — multi-device safe):
  *
- *   APPENDS (addPill, addDose, addHistoryDose) — 0 reads, 1 write:
+ *   APPENDS (addDose, addHistoryDose) — 0 reads, 1 write:
  *     1. Update local cache
  *     2. Enqueue operation to WAL
  *     3. Attempt Firestore arrayUnion (atomic append, no read needed)
  *     4. On success → dequeue
  *
- *   MUTATIONS (updatePill, deletePill, removeDose) — 1 read, 1 write:
+ *   MUTATIONS (addPill, updatePill, deletePill, removeDose, updateHistoryDoseStatus) — 1 read, 1 write:
  *     1. Update local cache
  *     2. Enqueue operation to WAL
  *     3. Attempt Firestore runTransaction (read → merge → write)
@@ -54,6 +54,7 @@ import {
   setCachedHistory,
   setLastSyncTime,
   enqueueWrite,
+  enqueueWriteBatch,
   dequeueWrite,
   getWriteQueue,
   hasPendingWrites,
@@ -90,19 +91,46 @@ function toDate(val: any): Date {
   return new Date();
 }
 
+function countActivePills(pills: Pill[]): number {
+  return pills.filter((p) => p.isActive).length;
+}
+
+function countActiveScheduled(pills: Pill[]): number {
+  return pills.filter((p) => p.isActive && p.pillType === 'scheduled').length;
+}
+
+function countActiveRandom(pills: Pill[]): number {
+  return pills.filter((p) => p.isActive && p.pillType === 'random').length;
+}
+
+/** Recompute all pill counters from the pills array. */
+function recomputeCounts(dashboard: DashboardDocument): void {
+  dashboard.activePillCount = countActivePills(dashboard.pills);
+  dashboard.activeScheduledCount = countActiveScheduled(dashboard.pills);
+  dashboard.activeRandomCount = countActiveRandom(dashboard.pills);
+}
+
 function serializeDashboard(data: DashboardDocument): string {
   return JSON.stringify({
     pills: data.pills.map(serializePill),
     activeDoses: data.activeDoses.map(serializeDose),
+    activePillCount: data.activePillCount,
+    activeScheduledCount: data.activeScheduledCount,
+    activeRandomCount: data.activeRandomCount,
     updatedAt: data.updatedAt.toISOString(),
   });
 }
 
 function deserializeDashboard(json: string): DashboardDocument {
   const raw = JSON.parse(json);
+  const pills = (raw.pills ?? []).map(deserializePill);
   return {
-    pills: (raw.pills ?? []).map(deserializePill),
+    pills,
     activeDoses: (raw.activeDoses ?? []).map(deserializeDose),
+    // Recompute from pills if fields are missing (migration from old cache)
+    activePillCount: raw.activePillCount ?? countActivePills(pills),
+    activeScheduledCount: raw.activeScheduledCount ?? countActiveScheduled(pills),
+    activeRandomCount: raw.activeRandomCount ?? countActiveRandom(pills),
     updatedAt: new Date(raw.updatedAt),
   };
 }
@@ -162,14 +190,21 @@ function toFirestoreDashboard(data: DashboardDocument): Record<string, any> {
   return {
     pills: data.pills.map(serializePill),
     activeDoses: data.activeDoses.map(serializeDose),
+    activePillCount: data.activePillCount,
+    activeScheduledCount: data.activeScheduledCount,
+    activeRandomCount: data.activeRandomCount,
     updatedAt: serverTimestamp(),
   };
 }
 
 function parseDashboardDoc(docData: Record<string, any>): DashboardDocument {
+  const pills = (docData.pills ?? []).map(deserializePill);
   return {
-    pills: (docData.pills ?? []).map(deserializePill),
+    pills,
     activeDoses: (docData.activeDoses ?? []).map(deserializeDose),
+    activePillCount: docData.activePillCount ?? countActivePills(pills),
+    activeScheduledCount: docData.activeScheduledCount ?? countActiveScheduled(pills),
+    activeRandomCount: docData.activeRandomCount ?? countActiveRandom(pills),
     updatedAt: toDate(docData.updatedAt),
   };
 }
@@ -185,7 +220,7 @@ function parseHistoryDoc(docData: Record<string, any>): MonthlyHistoryDocument {
 // ─── Empty state ─────────────────────────────────────
 
 function emptyDashboard(): DashboardDocument {
-  return { pills: [], activeDoses: [], updatedAt: new Date() };
+  return { pills: [], activeDoses: [], activePillCount: 0, activeScheduledCount: 0, activeRandomCount: 0, updatedAt: new Date() };
 }
 
 // ─── Dashboard: Load ─────────────────────────────────
@@ -252,6 +287,9 @@ export async function loadDashboard(
         remote.activeDoses.length < beforeDoses ||
         remote.pills.length < beforePills;
 
+      // Recompute counters after pruning
+      recomputeCounts(remote);
+
       // Write pruned data back to Firestore so stale entries don't accumulate
       if (pruned) {
         await setDoc(dashboardRef(uid), toFirestoreDashboard(remote))
@@ -294,8 +332,15 @@ async function flushWriteQueue(uid: string): Promise<void> {
 
   for (const entry of queue) {
     try {
-      // Skip legacy state-based entries from before the operations migration
       if (!entry.operation) {
+        // Legacy state-based entries from before the operations migration.
+        // Log the loss so it's visible in Sentry — these writes are unrecoverable
+        // because the old format didn't store enough info to replay.
+        captureException(
+          new Error(`WAL migration: dropped legacy entry ${entry.id} (no operation field). ` +
+            `Created at ${new Date(entry.createdAt).toISOString()}. ` +
+            `This entry used the old snapshot format and cannot be replayed.`),
+        );
         await dequeueWrite(uid, entry.id);
         continue;
       }
@@ -316,9 +361,15 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
   switch (operation.op) {
     case 'addPill': {
       const pill = JSON.parse(operation.pill);
-      await updateDoc(dashboardRef(uid), {
-        pills: arrayUnion(pill),
-        updatedAt: serverTimestamp(),
+      const pillId = pill.id;
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(dashboardRef(uid));
+        const current = snap.exists() ? parseDashboardDoc(snap.data()) : emptyDashboard();
+        // Idempotent: skip if pill ID already exists (WAL replay after partial success)
+        if (current.pills.some((p) => p.id === pillId)) return;
+        current.pills.push(deserializePill(pill));
+        recomputeCounts(current);
+        tx.set(dashboardRef(uid), toFirestoreDashboard(current));
       });
       break;
     }
@@ -356,6 +407,7 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
           ...partialData,
           updatedAt: new Date(),
         };
+        recomputeCounts(remote);
         remote.updatedAt = new Date();
         tx.set(dashboardRef(uid), toFirestoreDashboard(remote));
       });
@@ -375,6 +427,7 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
         remote.activeDoses = remote.activeDoses.filter(
           (d) => d.pillId !== operation.pillId,
         );
+        recomputeCounts(remote);
         remote.updatedAt = new Date();
         tx.set(dashboardRef(uid), toFirestoreDashboard(remote));
       });
@@ -394,18 +447,34 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
       });
       break;
     }
+
+    case 'updateHistoryDoseStatus': {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(historyRef(uid, operation.month));
+        if (!snap.exists()) return;
+        const history = parseHistoryDoc(snap.data());
+        const idx = history.doses.findIndex((d) => d.id === operation.doseId);
+        if (idx === -1) return;
+        history.doses[idx].status = operation.status as Dose['status'];
+        history.updatedAt = new Date();
+        tx.set(historyRef(uid, operation.month), {
+          month: history.month,
+          doses: history.doses.map(serializeDose),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      break;
+    }
   }
 }
 
-// ─── WAL helper: enqueue + attempt ──────────────────
+// ─── WAL helpers ──────────────────────────────────────
 
 /**
- * Common pattern: enqueue operation → update cache → attempt Firestore write → dequeue on success.
+ * Common pattern: enqueue operation → attempt Firestore write → dequeue on success.
  *
  * Order matters: WAL enqueue happens BEFORE cache update, so a crash between
  * the two can't leave optimistic local state without a corresponding WAL entry.
- * If we crash after enqueue but before cache, the WAL still syncs on next open
- * and the background Firestore fetch updates the cache.
  */
 async function enqueueAndAttempt(
   uid: string,
@@ -427,6 +496,48 @@ async function enqueueAndAttempt(
   }
 }
 
+/**
+ * Enqueue multiple operations atomically to the WAL before attempting any writes.
+ * All entries are persisted in a single AsyncStorage write — a kill between
+ * entries is impossible because it's one setItem call.
+ * Returns entry IDs for dequeue tracking.
+ */
+async function enqueueMultiple(
+  uid: string,
+  operations: WriteOperation[],
+): Promise<{ id: string; operation: WriteOperation }[]> {
+  const now = Date.now();
+  const entries = operations.map((operation) => ({
+    id: generateId(),
+    operation,
+  }));
+  const walEntries: WriteQueueEntry[] = entries.map(({ id, operation }) => ({
+    id,
+    operation,
+    createdAt: now,
+  }));
+  await enqueueWriteBatch(uid, walEntries);
+  return entries;
+}
+
+/**
+ * Attempt Firestore writes for previously-enqueued WAL entries.
+ * Dequeues each entry on success; leaves in WAL on failure.
+ */
+async function attemptEnqueued(
+  uid: string,
+  entries: { id: string; operation: WriteOperation }[],
+): Promise<void> {
+  for (const { id, operation } of entries) {
+    try {
+      await executeOperation(uid, operation);
+      await dequeueWrite(uid, id);
+    } catch (error) {
+      captureException(error);
+    }
+  }
+}
+
 // ─── Pills CRUD ──────────────────────────────────────
 
 export async function addPill(
@@ -442,6 +553,7 @@ export async function addPill(
     updatedAt: now,
   };
   dashboard.pills.push(newPill);
+  recomputeCounts(dashboard);
   dashboard.updatedAt = now;
 
   // WAL first (survives app kill), then cache
@@ -463,6 +575,7 @@ export async function updatePill(
   const idx = dashboard.pills.findIndex((p) => p.id === pillId);
   if (idx === -1) throw new Error('Pill not found');
   dashboard.pills[idx] = { ...dashboard.pills[idx], ...data, updatedAt: new Date() };
+  recomputeCounts(dashboard);
   dashboard.updatedAt = new Date();
 
   // WAL first, then cache
@@ -487,6 +600,7 @@ export async function deletePill(uid: string, pillId: string): Promise<Dashboard
   }
   // Also remove any active doses for this pill
   dashboard.activeDoses = dashboard.activeDoses.filter((d) => d.pillId !== pillId);
+  recomputeCounts(dashboard);
   dashboard.updatedAt = new Date();
 
   // WAL first, then cache
@@ -498,6 +612,12 @@ export async function deletePill(uid: string, pillId: string): Promise<Dashboard
 
 // ─── Doses ───────────────────────────────────────────
 
+/**
+ * Record a dose: updates dashboard AND monthly history atomically.
+ *
+ * Both WAL entries are enqueued BEFORE any Firestore write, so a crash
+ * between the two writes can't leave dashboard and history out of sync.
+ */
 export async function recordDose(
   uid: string,
   pill: Pick<Pill, 'id' | 'drugName' | 'halfLifeMinutes'>,
@@ -522,69 +642,84 @@ export async function recordDose(
     createdAt: now,
   };
 
-  // Add to active doses in dashboard
+  // Update local state
   dashboard.activeDoses.push(newDose);
   dashboard.updatedAt = now;
 
   const serializedDose = serializeDose(newDose);
+  const month = toMonthKey(newDose.takenAt);
 
-  // WAL first (both dashboard + history), then cache
-  await enqueueAndAttempt(uid, {
-    op: 'addDose',
-    dose: JSON.stringify(serializedDose),
-  });
+  // Enqueue BOTH operations to WAL first — atomic guarantee.
+  // If app crashes after this point, both operations will be retried on next open.
+  const entries = await enqueueMultiple(uid, [
+    { op: 'addDose', dose: JSON.stringify(serializedDose) },
+    { op: 'addHistoryDose', month, dose: JSON.stringify(serializedDose) },
+  ]);
+
+  // Update both caches
   await setCachedDashboard(uid, serializeDashboard(dashboard));
+  await updateHistoryCache(uid, month, newDose);
 
-  // arrayUnion to monthly history: 0 reads, 1 write
-  await appendToHistory(uid, newDose);
+  // Attempt both Firestore writes (failures stay in WAL)
+  await attemptEnqueued(uid, entries);
 
   return { id: newDose.id, dashboard };
 }
 
+/**
+ * Update dose status (dismiss/complete). Updates both dashboard and history.
+ */
 export async function updateDoseStatus(
   uid: string,
   doseId: string,
   status: 'active' | 'dismissed' | 'completed',
 ): Promise<DashboardDocument> {
   const dashboard = await getCurrentDashboard(uid);
-  const idx = dashboard.activeDoses.findIndex((d) => d.id === doseId);
-  if (idx !== -1) {
-    dashboard.activeDoses[idx].status = status;
+  const doseIdx = dashboard.activeDoses.findIndex((d) => d.id === doseId);
+
+  // Capture dose info before removing (needed for history update)
+  const dose = doseIdx !== -1 ? dashboard.activeDoses[doseIdx] : null;
+
+  if (doseIdx !== -1) {
+    dashboard.activeDoses[doseIdx].status = status;
     if (status !== 'active') {
-      // Remove from active doses
-      dashboard.activeDoses.splice(idx, 1);
+      dashboard.activeDoses.splice(doseIdx, 1);
     }
   }
   dashboard.updatedAt = new Date();
 
-  // WAL first, then cache
-  await enqueueAndAttempt(uid, { op: 'removeDose', doseId });
+  // Build operations list — dashboard removal + history status update
+  const operations: WriteOperation[] = [{ op: 'removeDose', doseId }];
+  if (dose) {
+    const month = toMonthKey(dose.takenAt);
+    operations.push({ op: 'updateHistoryDoseStatus', month, doseId, status });
+
+    // Update history cache
+    const history = await getCachedMonthHistory(uid, month);
+    const histIdx = history.doses.findIndex((d) => d.id === doseId);
+    if (histIdx !== -1) {
+      history.doses[histIdx].status = status as Dose['status'];
+      history.updatedAt = new Date();
+      await setCachedHistory(uid, month, JSON.stringify({
+        month: history.month,
+        doses: history.doses.map(serializeDose),
+        updatedAt: history.updatedAt.toISOString(),
+      }));
+    }
+  }
+
+  // Enqueue all operations atomically, then attempt
+  const entries = await enqueueMultiple(uid, operations);
   await setCachedDashboard(uid, serializeDashboard(dashboard));
+  await attemptEnqueued(uid, entries);
 
   return dashboard;
 }
 
 // ─── History ─────────────────────────────────────────
 
-/**
- * Append a dose to the monthly history bucket.
- * Uses arrayUnion — 0 reads, 1 write, multi-device safe.
- * setDoc with merge creates the doc if the month doesn't exist yet.
- */
-async function appendToHistory(uid: string, dose: Dose): Promise<void> {
-  const month = toMonthKey(dose.takenAt);
-
-  // WAL first, then cache
-  await enqueueAndAttempt(uid, {
-    op: 'addHistoryDose',
-    month,
-    dose: JSON.stringify(serializeDose(dose)),
-  });
-
-  // Update local cache after WAL is persisted.
-  // Use cache-only read (no Firestore) — arrayUnion handles the remote append.
-  // If cache is cold for this month, start with empty; the next background sync
-  // will populate the full history.
+/** Update local history cache with a new dose (write path only). */
+async function updateHistoryCache(uid: string, month: string, dose: Dose): Promise<void> {
   const history = await getCachedMonthHistory(uid, month);
   history.doses.push(dose);
   history.updatedAt = new Date();
@@ -613,25 +748,68 @@ async function getCachedMonthHistory(uid: string, month: string): Promise<Monthl
   return { month, doses: [], updatedAt: new Date() };
 }
 
+/**
+ * Read month history: fetches from Firestore and merges with any
+ * locally-pending doses that haven't synced yet.
+ *
+ * This avoids the cross-device sync bug where a cold local cache would
+ * shadow doses recorded on another device.
+ */
 async function getMonthHistory(uid: string, month: string): Promise<MonthlyHistoryDocument> {
-  // Try cache first
-  const cached = await getCachedMonthHistory(uid, month);
-  if (cached.doses.length > 0) return cached;
-
-  // Fetch from Firestore (1 read)
-  const snap = await getDoc(historyRef(uid, month));
-  if (snap.exists()) {
-    const history = parseHistoryDoc(snap.data());
-    // Cache it
-    await setCachedHistory(uid, month, JSON.stringify({
-      month: history.month,
-      doses: history.doses.map(serializeDose),
-      updatedAt: history.updatedAt.toISOString(),
-    })).catch(() => {});
-    return history;
+  // Try Firestore first for authoritative data
+  let remote: MonthlyHistoryDocument | null = null;
+  try {
+    const snap = await getDoc(historyRef(uid, month));
+    if (snap.exists()) {
+      remote = parseHistoryDoc(snap.data());
+    }
+  } catch {
+    // Offline — fall back to cache below
   }
 
-  return { month, doses: [], updatedAt: new Date() };
+  if (remote) {
+    // Merge remote data with local cache:
+    // - Doses only in remote → include as-is
+    // - Doses only in local → include (WAL entries not yet flushed)
+    // - Doses in both → prefer local status (may be dismissed/completed locally
+    //   while remote still shows active, until WAL flushes)
+    const cached = await getCachedMonthHistory(uid, month);
+    const localById = new Map(cached.doses.map((d) => [d.id, d]));
+    const mergedIds = new Set<string>();
+    const merged: Dose[] = [];
+
+    for (const remoteDose of remote.doses) {
+      const localDose = localById.get(remoteDose.id);
+      if (localDose) {
+        // Both exist — use remote data but prefer local status if it's more advanced
+        const statusPriority = { active: 0, completed: 1, dismissed: 1 };
+        const useLocal = (statusPriority[localDose.status] ?? 0) > (statusPriority[remoteDose.status] ?? 0);
+        merged.push(useLocal ? { ...remoteDose, status: localDose.status } : remoteDose);
+      } else {
+        merged.push(remoteDose);
+      }
+      mergedIds.add(remoteDose.id);
+    }
+
+    // Add local-only doses (pending WAL entries)
+    for (const localDose of cached.doses) {
+      if (!mergedIds.has(localDose.id)) {
+        merged.push(localDose);
+      }
+    }
+
+    remote.doses = merged;
+    // Update cache with merged data
+    await setCachedHistory(uid, month, JSON.stringify({
+      month: remote.month,
+      doses: remote.doses.map(serializeDose),
+      updatedAt: remote.updatedAt.toISOString(),
+    })).catch(() => {});
+    return remote;
+  }
+
+  // Offline or no remote data — return local cache
+  return await getCachedMonthHistory(uid, month);
 }
 
 /**

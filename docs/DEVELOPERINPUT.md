@@ -50,22 +50,29 @@ There is **no `firestore.rules` file** in the project. Your Firestore database c
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can only read/write their own profile
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Users can read their own profile
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Users can write their own profile, EXCEPT subscriptionTier
+      // (subscriptionTier should only be set by Cloud Functions — see note below)
+      allow write: if request.auth != null && request.auth.uid == userId
+        && (!('subscriptionTier' in request.resource.data)
+            || request.resource.data.subscriptionTier == resource.data.subscriptionTier);
 
       // Dashboard document (single-doc vault: pills + active doses)
       match /data/{docId} {
         allow read: if request.auth != null && request.auth.uid == userId;
-        // Enforce free tier pill limit at database level
+        // Enforce free tier pill limits: 1 scheduled + 4 random
         allow write: if request.auth != null && request.auth.uid == userId
           && (
             // Pro users: no limit
             get(/databases/$(database)/documents/users/$(userId)).data.subscriptionTier == 'pro'
-            // Free users: max 1 scheduled pill
-            || request.resource.data.pills.size() <= 1
-            // Allow writes that don't add scheduled pills (e.g. recording doses)
-            || request.resource.data.pills.size() <= resource.data.pills.size()
+            // Free users: per-type limits
+            || (request.resource.data.activeScheduledCount <= 1
+                && request.resource.data.activeRandomCount <= 4)
+            // Allow writes that don't increase counts (e.g. recording doses, deleting pills)
+            || (request.resource.data.activeScheduledCount <= resource.data.activeScheduledCount
+                && request.resource.data.activeRandomCount <= resource.data.activeRandomCount)
           );
       }
 
@@ -78,9 +85,26 @@ service cloud.firestore {
 }
 ```
 
-**Note**: The pill limit rule counts ALL pills in the array. Free users can have at most 1 pill total in their dashboard. Pro status is checked from the user profile document. The third condition allows writes that don't add new pills (e.g., recording a dose or removing a pill).
+**Important changes from previous rules:**
+- **`activeScheduledCount` / `activeRandomCount`** are used instead of `pills.size()`. These denormalized counters only count active (non-deleted) pills by type, matching the GAMEPLAN spec: free = 1 scheduled + 4 random, pro = unlimited.
+- **`subscriptionTier` is locked** in the user profile — clients cannot change it directly. See the Cloud Function requirement below.
+- The third condition allows writes that don't increase either count (doses, deletions, updates).
 
-**Status**: [ ] Rules deployed
+**SECURITY NOTE — subscriptionTier requires a Cloud Function:**
+The rules above block the client from changing `subscriptionTier`, which means you **must** deploy the Cloud Function in `functions/src/index.ts` that sets this field when RevenueCat reports a subscription change. Without this, the tier will remain `free` even after purchase.
+
+**Deployment steps:**
+```bash
+cd functions && npm install && npm run build
+firebase functions:config:set revenuecat.webhook_secret="YOUR_SECRET"
+firebase deploy --only functions
+```
+
+Then in RevenueCat dashboard > Integrations > Webhooks, set the URL to your function endpoint and the same shared secret.
+
+**Client-side sync (temporary fallback):** The client (`useSubscriptionStore`) still calls `updateSubscriptionTier()` as a fallback. With the rules above, this write will be rejected by Firestore. Once the Cloud Function is deployed, you can remove the client-side sync call entirely. Until then, if you need subscriptions to work without the Cloud Function, temporarily relax the `subscriptionTier` lock in the rules — but this is insecure.
+
+**Status**: [ ] Rules deployed / [ ] Cloud Function deployed
 
 ---
 
@@ -154,22 +178,17 @@ npx eas-cli login
 
 ---
 
-### 10. Legal pages are non-functional
+### 10. Legal pages need content
 
-Two places reference Terms of Service and Privacy Policy with no actual content or navigation:
+Navigation is wired up — both Settings and Register screens now open `src/app/legal.tsx` with the correct `type` param ("terms" or "privacy"). The screen lives at the root route level so it's accessible to both authenticated and unauthenticated users. Placeholder text is shown.
 
-| Location | File | Issue |
-|----------|------|-------|
-| Settings screen | `src/app/(main)/(tabs)/settings.tsx:85-93` | `<Pressable>` buttons with no `onPress` handler |
-| Register screen | `src/app/(auth)/register.tsx:132-140` | Text links with no navigation |
+**Action**: You need to write (or have a lawyer draft) your actual Terms of Service and Privacy Policy. Replace the placeholder text in `src/app/legal.tsx` (the `LEGAL_CONTENT` object).
 
 **Stitch mockups exist** at:
 - `docs/stitch_halflifecontrol_html/terms_of_service/`
 - `docs/stitch_halflifecontrol_html/privacy_policy/`
 
-**Action**: You need to write (or have a lawyer draft) your actual Terms of Service and Privacy Policy. The code to display them can be built by agents, but the legal content must come from you.
-
-**Status**: [ ] Legal content drafted / [ ] Screens wired up
+**Status**: [x] Screens wired up / [ ] Legal content drafted
 
 ---
 
@@ -188,6 +207,32 @@ Two places reference Terms of Service and Privacy Policy with no actual content 
 **Action**: Either provide a proper illustration asset, or approve the emoji placeholder for v1.
 
 **Status**: [ ] Illustration provided / [ ] Emoji approved for v1
+
+---
+
+### 13. ~~AsyncStorage stores medication data in plaintext~~ — FIXED
+
+All PHI (medication data) in the local cache and WAL is now AES-256-GCM encrypted before writing to AsyncStorage. The encryption key is generated once per device and stored in `expo-secure-store` (hardware-backed iOS Keychain / Android Keystore). Non-PHI metadata (lastSync timestamp) remains unencrypted.
+
+**Migration**: Legacy unencrypted values are detected by checking if the stored string starts with `{` or `[` (valid JSON). On first read, they are transparently re-encrypted in place. No manual migration step needed.
+
+**Status**: [x] Implemented
+
+---
+
+### 14. Remaining notification/scheduling feature gaps
+
+The following features from the GAMEPLAN spec are not yet implemented. These are **feature additions**, not bugs in existing functionality:
+
+| Feature | Spec Reference | Effort |
+|---------|---------------|--------|
+| `every_n_days` frequency in add-pill UI | `GAMEPLAN.md` schedule section | Low — type exists, UI option missing |
+| Grouped notifications (multiple pills at same time) | `GAMEPLAN.md:267` | Medium — requires notification batching logic |
+| Notification action buttons ("Took it" / "Snooze") | `GAMEPLAN.md:268` | Medium — expo-notifications category actions |
+| Snooze flow (15-minute reschedule) | `GAMEPLAN.md:268` | Medium — ties into action buttons |
+| `autoAssumeTaken` behavior | `GAMEPLAN.md:269` | High — needs Cloud Function for background execution |
+
+**Status**: [ ] Prioritized for future phase
 
 ---
 

@@ -126,6 +126,7 @@ export default function SettingsScreen() {
         {/* Legal */}
         <Pressable
           style={styles.legalBtn}
+          onPress={() => router.push({ pathname: '/legal', params: { type: 'terms' } })}
           accessibilityRole="button"
           accessibilityLabel="Terms of Service"
         >
@@ -135,6 +136,7 @@ export default function SettingsScreen() {
 
         <Pressable
           style={styles.legalBtn}
+          onPress={() => router.push({ pathname: '/legal', params: { type: 'privacy' } })}
           accessibilityRole="button"
           accessibilityLabel="Privacy Policy"
         >

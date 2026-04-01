@@ -40,7 +40,16 @@ export default function DashboardScreen() {
   }, [pills, user]);
 
   const scheduledPills = useMemo(() => pills.filter((p) => p.pillType === 'scheduled'), [pills]);
-  const randomPills = useMemo(() => pills.filter((p) => p.pillType === 'random'), [pills]);
+  // Random pills auto-archive: only show if they have a non-eliminated active dose
+  const randomPills = useMemo(() => {
+    const now = Date.now();
+    return pills.filter((p) => {
+      if (p.pillType !== 'random') return false;
+      const dose = activeDoses.find((d) => d.pillId === p.id);
+      // Show if there's an active countdown, or if the pill was just added (no dose yet)
+      return !dose || dose.eliminationAt.getTime() > now;
+    });
+  }, [pills, activeDoses]);
 
   const sections = useMemo<Section[]>(() => {
     const s: Section[] = [];
@@ -50,7 +59,13 @@ export default function DashboardScreen() {
   }, [scheduledPills, randomPills]);
 
   const getActiveDose = useCallback(
-    (pillId: string): Dose | undefined => activeDoses.find((d) => d.pillId === pillId),
+    (pillId: string): Dose | undefined => {
+      const dose = activeDoses.find((d) => d.pillId === pillId);
+      if (!dose) return undefined;
+      // Skip eliminated doses — allows re-tracking random pills
+      if (dose.eliminationAt.getTime() <= Date.now()) return undefined;
+      return dose;
+    },
     [activeDoses],
   );
 

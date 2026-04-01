@@ -13,8 +13,9 @@ import { updateSubscriptionTier } from '@/services/firebase/auth';
 import { captureException } from '@/services/sentry';
 import type { PurchasesPackage } from 'react-native-purchases';
 
-/** Max scheduled pills on free tier. */
+/** Free tier limits (from GAMEPLAN spec). */
 export const FREE_SCHEDULED_LIMIT = 1;
+export const FREE_RANDOM_LIMIT = 4;
 
 interface SubscriptionState {
   tier: SubscriptionTier;
@@ -31,6 +32,8 @@ interface SubscriptionState {
   restore: () => Promise<void>;
   /** Check if the user can add another scheduled pill. */
   canAddScheduledPill: (currentScheduledCount: number) => boolean;
+  /** Check if the user can track another random pill simultaneously. */
+  canAddRandomPill: (currentRandomCount: number) => boolean;
 }
 
 let cleanupListener: (() => void) | null = null;
@@ -110,5 +113,11 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     const { tier } = get();
     if (tier === 'pro') return true;
     return currentScheduledCount < FREE_SCHEDULED_LIMIT;
+  },
+
+  canAddRandomPill: (currentRandomCount: number) => {
+    const { tier } = get();
+    if (tier === 'pro') return true;
+    return currentRandomCount < FREE_RANDOM_LIMIT;
   },
 }));

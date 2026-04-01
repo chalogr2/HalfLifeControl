@@ -70,6 +70,9 @@ export interface UserProfile {
 export interface DashboardDocument {
   pills: Pill[];
   activeDoses: Dose[];
+  activePillCount: number;
+  activeScheduledCount: number;
+  activeRandomCount: number;
   updatedAt: Date;
 }
 

@@ -149,11 +149,21 @@ export default function RegisterScreen() {
                 </View>
                 <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.termsText}>
                   I agree to the{' '}
-                  <Typography variant="bodyMd" color="primary" style={styles.bold}>
+                  <Typography
+                    variant="bodyMd"
+                    color="primary"
+                    style={styles.bold}
+                    onPress={() => router.push({ pathname: '/legal', params: { type: 'terms' } })}
+                  >
                     Terms of Service
                   </Typography>
                   {' '}and{' '}
-                  <Typography variant="bodyMd" color="primary" style={styles.bold}>
+                  <Typography
+                    variant="bodyMd"
+                    color="primary"
+                    style={styles.bold}
+                    onPress={() => router.push({ pathname: '/legal', params: { type: 'privacy' } })}
+                  >
                     Privacy Policy
                   </Typography>
                 </Typography>

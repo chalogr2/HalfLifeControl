@@ -91,9 +91,11 @@ export default function DayDetailScreen() {
     }
     return false;
   });
-  const scheduledTaken = doses.filter((d) =>
-    scheduledPillsDueToday.some((p) => p.id === d.pillId),
-  ).length;
+  const scheduledTaken = new Set(
+    doses
+      .filter((d) => scheduledPillsDueToday.some((p) => p.id === d.pillId))
+      .map((d) => d.pillId),
+  ).size;
   const completionPct = scheduledPillsDueToday.length > 0
     ? Math.round((scheduledTaken / scheduledPillsDueToday.length) * 100)
     : doses.length > 0 ? 100 : 0;

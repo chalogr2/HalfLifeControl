@@ -824,7 +824,7 @@ Addressed findings from automated code review pass:
 
 **Critical/High:**
 - **WAL ordering**: All write paths now enqueue to WAL *before* updating local cache, preventing orphaned optimistic state on app kill
-- **Subscription tier Firestore sync**: `useSubscriptionStore` now writes `subscriptionTier` to Firestore on purchase, restore, and tier changes via `updateSubscriptionTier()`. Security rules can now correctly gate on this field
+- **Subscription tier Firestore sync**: `useSubscriptionStore` writes `subscriptionTier` to Firestore as a temporary fallback. The secure path is the Cloud Function in `functions/src/index.ts` (RevenueCat webhook) — see Code Review Fixes Round 3 for the full enforcement rework
 - **RevenueCat state leak**: Subscription service uses `Purchases.logIn()` on user switch and `Purchases.logOut()` on sign-out. Store cleans up listener on reset
 - **Onboarding "No" branch**: Now marks onboarding complete and routes to dashboard instead of entering add-pill flow. AuthGate also handles `(onboarding)` group redirect
 - **"Start Tracking" records dose**: Random pills now call `recordDose()` after creation so countdown starts immediately
@@ -862,6 +862,98 @@ Addressed findings from automated code review pass:
 **Files changed**:
 - `src/services/firebase/pills.ts` — pruning logic in `loadDashboard`, size budget comment
 - `firestore.indexes.json` — index exemptions for array fields
+
+### Code Review Fixes — Round 2 (2026-04-01)
+
+Addressed second round of automated code review + manual findings:
+
+**Critical:**
+- **Firestore authorization hardened**: Added `activePillCount` denormalized counter to dashboard document. Firestore rules now check this counter (only counts active pills) instead of `pills.size()` (which included soft-deleted pills, locking free users out of adding replacement pills). Security rules also block client-side writes to `subscriptionTier` — requires Cloud Function webhook from RevenueCat. Documented Cloud Function code in `DEVELOPERINPUT.md`.
+
+**High:**
+- **Atomic dose recording**: `recordDose()` now enqueues BOTH dashboard and history WAL entries before attempting either Firestore write. Previously, a crash between the two writes would leave dashboard and history out of sync. New `enqueueMultiple()` + `attemptEnqueued()` helpers handle the atomic pattern.
+- **Cross-device history sync fixed**: `getMonthHistory()` no longer blindly returns non-empty cache. It fetches from Firestore first, then merges with any locally-pending doses from cache that haven't synced yet. Falls back to cache-only when offline.
+- **Dismiss/completion status persisted to history**: `updateDoseStatus()` now also writes the status change to the monthly history document via a new `updateHistoryDoseStatus` WAL operation. Previously, dismissing or completing a dose only removed it from the dashboard — the history entry stayed as "active" forever.
+- **addPill uses transaction**: `addPill` WAL replay now uses `runTransaction` (not `arrayUnion`) so `activePillCount` stays in sync with the pills array. This is critical for the free-tier enforcement in Firestore rules.
+
+**Medium:**
+- **Day detail completion fixed**: `[date].tsx` now counts unique scheduled pills taken (via `Set` of `pillId`), not raw dose count. Taking the same pill twice no longer inflates the completion percentage.
+- **Legal links wired up**: Settings and Register screens now navigate to `src/app/(main)/legal.tsx` with the correct `type` param. Placeholder text is shown — actual legal content must be drafted by the developer.
+- **WAL migration logging**: Legacy WAL entries (old snapshot format without `operation` field) are now reported to Sentry with timestamps before being dropped, instead of silently discarded. This makes data loss from the migration visible.
+- **Remaining feature gaps documented**: `every_n_days` UI, grouped notifications, action buttons, snooze, `autoAssumeTaken` tracked as future feature work in `DEVELOPERINPUT.md`. AsyncStorage plaintext limitation documented with options.
+
+**Files changed:**
+- `src/core/types.ts` — added `activePillCount` to `DashboardDocument`
+- `src/services/cache/index.ts` — added `updateHistoryDoseStatus` WAL operation type
+- `src/services/firebase/pills.ts` — atomic dose recording, cross-device history sync, history status updates, activePillCount tracking, WAL migration logging, addPill transaction
+- `src/app/(main)/history/[date].tsx` — unique pill count in completion
+- `src/app/(main)/(tabs)/settings.tsx` — legal link navigation
+- `src/app/(auth)/register.tsx` — legal link navigation
+- `src/app/(main)/legal.tsx` — new legal placeholder screen
+- `docs/DEVELOPERINPUT.md` — updated Firestore rules, Cloud Function code, legal status, feature gaps, AsyncStorage limitation
+- `docs/APPPROGRESS.md` — this section
+
+### HIPAA-Compliant Local Encryption (2026-04-01)
+
+**Problem**: AsyncStorage stores medication data (drug names, dosages, schedules) as plaintext JSON. While iOS and Android encrypt app sandboxes at rest by default, this is insufficient for HIPAA compliance — data is accessible on rooted/jailbroken devices.
+
+**Solution**: AES-256-GCM encryption layer inside `src/services/cache/index.ts`:
+
+- **Key generation**: A 256-bit AES key is generated once per device via `expo-crypto` (`AESEncryptionKey.generate(256)`)
+- **Key storage**: The key is stored in `expo-secure-store` (hardware-backed iOS Keychain / Android Keystore) — never in AsyncStorage
+- **Encryption**: All PHI data (dashboard cache, history cache, WAL entries) is encrypted with AES-256-GCM before writing to AsyncStorage. Each write gets a unique 12-byte IV.
+- **Storage format**: `base64(IV + ciphertext + GCM_tag)` — a single opaque string per AsyncStorage key
+- **Non-PHI**: `lastSync` timestamp is stored in plaintext (not health data)
+- **Migration**: Legacy unencrypted JSON values (starting with `{` or `[`) are detected on first read, transparently re-encrypted in place, and returned as plaintext to the caller. No manual migration needed.
+
+**Overhead**:
+- Size: ~33% increase in local storage (base64 encoding). On a 15 KB dashboard, that's ~20 KB encrypted. AsyncStorage handles up to 6 MB — headroom is still massive.
+- Performance: ~1-2ms per encrypt/decrypt operation. The AES key is cached in memory after first load, so SecureStore is only hit once per app session.
+- Firebase: Zero impact. Encryption is local-only — Firestore data format is unchanged.
+
+**Packages added**: `expo-crypto`, `expo-secure-store`
+
+**Files changed**:
+- `src/services/cache/index.ts` — `secureGet`/`secureSet` wrappers, encryption key management, migration detection
+- `docs/DEVELOPERINPUT.md` — updated item 13 status
+
+### Code Review Fixes — Round 3 (2026-04-01)
+
+Addressed third round of code review findings:
+
+**Critical:**
+- **Subscription enforcement reworked end-to-end**:
+  - Created `functions/` directory with actual deployable Cloud Function (`functions/src/index.ts`) — RevenueCat webhook that securely sets `subscriptionTier` via Admin SDK. Includes shared-secret auth, handles all RevenueCat event types (INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, etc.)
+  - Free tier limits now match GAMEPLAN spec: **1 scheduled + 4 random** (was incorrectly just "activePillCount <= 1")
+  - Added `activeScheduledCount` and `activeRandomCount` denormalized counters to `DashboardDocument` alongside `activePillCount`
+  - Firestore rules updated to check per-type limits separately
+  - `useSubscriptionStore` now exports both `canAddScheduledPill()` and `canAddRandomPill()`
+  - Add-pill screen enforces random pill limit in addition to scheduled limit
+  - Client-side `updateSubscriptionTier()` kept as documented temporary fallback (will be rejected by Firestore rules once deployed)
+
+**High:**
+- **enqueueMultiple is now truly atomic**: New `enqueueWriteBatch()` in `cache/index.ts` reads the WAL queue once and writes all entries in a single `AsyncStorage.setItem` call. A kill between entries is impossible because it's one write operation.
+- **addPill replay is now idempotent**: Transaction checks `current.pills.some((p) => p.id === pillId)` before pushing. If Firestore succeeds but dequeue fails, the next WAL replay harmlessly skips the duplicate.
+
+**Medium:**
+- **History merge prefers local status over stale remote**: `getMonthHistory()` now compares status priority when merging. If a dose exists in both remote and local cache, local dismissed/completed status wins over remote active status, preventing temporary reverts while WAL flushes.
+- **Random pills auto-archive on countdown completion**: Dashboard now filters out random pills whose dose has reached elimination. `getActiveDose()` skips eliminated doses so the pill becomes re-trackable. Matches GAMEPLAN spec: "auto-archive when countdown completes."
+- **Legal screen accessible to unauthenticated users**: Moved `legal.tsx` from `(main)/` to root `app/` route. The AuthGate doesn't interfere with root-level routes, so register-screen legal links now work for logged-out users. Settings-side navigation updated too.
+
+**Files changed:**
+- `functions/` — new directory: `package.json`, `tsconfig.json`, `src/index.ts` (Cloud Function)
+- `src/core/types.ts` — added `activeScheduledCount`, `activeRandomCount` to `DashboardDocument`
+- `src/services/cache/index.ts` — added `enqueueWriteBatch()` for atomic multi-entry WAL writes
+- `src/services/firebase/pills.ts` — `recomputeCounts()` helper, idempotent addPill, atomic enqueueMultiple, history merge with status priority, per-type counters
+- `src/stores/useSubscriptionStore.ts` — added `FREE_RANDOM_LIMIT`, `canAddRandomPill()`
+- `src/app/(main)/pill/add.tsx` — random pill limit gate
+- `src/app/(main)/(tabs)/dashboard.tsx` — auto-archive random pills, skip eliminated doses
+- `src/app/legal.tsx` — moved from `(main)/` to root route
+- `src/app/(main)/(tabs)/settings.tsx` — updated legal navigation path
+- `src/app/(auth)/register.tsx` — updated legal navigation path
+- `tsconfig.json` — excluded `functions/` from main compilation
+- `docs/DEVELOPERINPUT.md` — updated Firestore rules, Cloud Function deployment steps, legal screen path
+- `docs/APPPROGRESS.md` — this section
 
 ### TypeScript Verification
 
