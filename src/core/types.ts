@@ -4,6 +4,7 @@ export type PillType = 'scheduled' | 'random';
 export type ScheduleFrequency = 'daily' | 'specific_days' | 'every_n_days';
 export type DoseStatus = 'active' | 'dismissed' | 'completed';
 export type DoseSource = 'manual' | 'notification' | 'auto' | 'retroactive';
+export type TimerType = 'action' | 'halfLife' | 'clearance';
 export type SubscriptionTier = 'free' | 'pro';
 
 export interface PillSchedule {
@@ -24,6 +25,7 @@ export interface Pill {
   pillType: PillType;
   schedule: PillSchedule | null;
   color: string;
+  preferredTimer: TimerType;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

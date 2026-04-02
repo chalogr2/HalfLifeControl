@@ -4,8 +4,11 @@ import {
   concentration as calcConcentration,
   minutesRemaining as calcMinutesRemaining,
   eliminationProgress as calcProgress,
+  timerMinutesRemaining,
+  timerProgress,
   formatTimeRemaining,
 } from '@/core/halflife';
+import type { TimerType } from '@/core/types';
 
 interface CountdownState {
   /** Percentage of drug remaining (0–100). */
@@ -24,20 +27,28 @@ interface CountdownState {
  * Reactive countdown driven by pure math — no drift.
  * Re-computes every second while foregrounded.
  * Catches up instantly on foreground resume.
+ *
+ * @param timerType - Which timer to display. Defaults to 'clearance' (5×HL, original behavior).
  */
-export function useCountdown(takenAt: Date, halfLifeMinutes: number): CountdownState {
+export function useCountdown(
+  takenAt: Date,
+  halfLifeMinutes: number,
+  timerType: TimerType = 'clearance',
+): CountdownState {
   const compute = (): CountdownState => {
     const now = new Date();
     const elapsed = (now.getTime() - takenAt.getTime()) / 60_000;
     const conc = calcConcentration(elapsed, halfLifeMinutes);
-    const remaining = calcMinutesRemaining(takenAt, halfLifeMinutes, now);
-    const progress = calcProgress(takenAt, halfLifeMinutes, now);
+    const remaining = timerMinutesRemaining(takenAt, halfLifeMinutes, timerType, now);
+    const progress = timerProgress(takenAt, halfLifeMinutes, timerType, now);
+    // Eliminated is always based on full clearance (5×HL)
+    const elimRemaining = calcMinutesRemaining(takenAt, halfLifeMinutes, now);
     return {
       concentration: conc,
       minutesRemaining: remaining,
       progress,
       timeLabel: formatTimeRemaining(remaining),
-      isEliminated: remaining <= 0,
+      isEliminated: elimRemaining <= 0,
     };
   };
 
@@ -60,7 +71,7 @@ export function useCountdown(takenAt: Date, halfLifeMinutes: number): CountdownS
       if (intervalRef.current) clearInterval(intervalRef.current);
       sub.remove();
     };
-  }, [takenAt.getTime(), halfLifeMinutes]);
+  }, [takenAt.getTime(), halfLifeMinutes, timerType]);
 
   return state;
 }

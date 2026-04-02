@@ -94,19 +94,9 @@ export default function DashboardScreen() {
 
   const handlePillPress = useCallback(
     (pill: Pill) => {
-      const dose = getActiveDose(pill.id);
-      if (dose) return; // Already tracking
-
-      Alert.alert(
-        pill.drugName,
-        'Record that you just took this?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Took it', onPress: () => handleTakePill(pill) },
-        ],
-      );
+      router.push(`/(main)/pill/${pill.id}`);
     },
-    [getActiveDose, handleTakePill],
+    [router],
   );
 
   const renderPill = useCallback(
@@ -116,9 +106,10 @@ export default function DashboardScreen() {
         activeDose={getActiveDose(item.id)}
         nextDoseLabel={getNextDoseLabel(item)}
         onPress={() => handlePillPress(item)}
+        onTakeDose={() => handleTakePill(item)}
       />
     ),
-    [getActiveDose, getNextDoseLabel, handlePillPress],
+    [getActiveDose, getNextDoseLabel, handlePillPress, handleTakePill],
   );
 
   return (

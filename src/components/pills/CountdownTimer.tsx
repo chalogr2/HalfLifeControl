@@ -4,18 +4,20 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { ProgressRing } from './ProgressRing';
 import { Typography } from '@/components/ui/Typography';
 import { spacing } from '@/theme';
+import type { TimerType } from '@/core/types';
 
 interface CountdownTimerProps {
   takenAt: Date;
   halfLifeMinutes: number;
   color?: string;
+  timerType?: TimerType;
 }
 
 /**
  * Shows a ring + concentration % + time remaining for an active dose.
  */
-export function CountdownTimer({ takenAt, halfLifeMinutes, color }: CountdownTimerProps) {
-  const { progress, timeLabel, concentration, isEliminated } = useCountdown(takenAt, halfLifeMinutes);
+export function CountdownTimer({ takenAt, halfLifeMinutes, color, timerType = 'clearance' }: CountdownTimerProps) {
+  const { progress, timeLabel, concentration, isEliminated } = useCountdown(takenAt, halfLifeMinutes, timerType);
 
   if (isEliminated) {
     return (

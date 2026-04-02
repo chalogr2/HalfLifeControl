@@ -15,9 +15,11 @@ interface PillCardProps {
   /** Next scheduled dose label, e.g. "Next: 8:30 AM". */
   nextDoseLabel?: string;
   onPress?: () => void;
+  /** Called when the play (take dose) button is tapped. */
+  onTakeDose?: () => void;
 }
 
-export function PillCard({ pill, activeDose, nextDoseLabel, onPress }: PillCardProps) {
+export function PillCard({ pill, activeDose, nextDoseLabel, onPress, onTakeDose }: PillCardProps) {
   const variant = pill.pillType === 'scheduled' ? 'scheduled' : 'random';
 
   return (
@@ -50,11 +52,21 @@ export function PillCard({ pill, activeDose, nextDoseLabel, onPress }: PillCardP
               takenAt={activeDose.takenAt}
               halfLifeMinutes={activeDose.halfLifeMinutes}
               color={pill.color}
+              timerType={pill.preferredTimer}
             />
           ) : (
-            <View style={[styles.takeButton, { backgroundColor: pill.color }]}>
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onTakeDose?.();
+              }}
+              style={[styles.takeButton, { backgroundColor: pill.color }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Take ${pill.drugName}`}
+              hitSlop={4}
+            >
               <Ionicons name="play" size={20} color="#fff" />
-            </View>
+            </Pressable>
           )}
         </View>
       </Card>

@@ -25,7 +25,6 @@ export default function AddPillScreen() {
   const params = useLocalSearchParams<{ type?: string }>();
   const user = useAuthStore((s) => s.user);
   const addPill = usePillStore((s) => s.addPill);
-  const recordDose = usePillStore((s) => s.recordDose);
   const pills = usePillStore((s) => s.pills);
   const activeDoses = usePillStore((s) => s.activeDoses);
   const canAddScheduledPill = useSubscriptionStore((s) => s.canAddScheduledPill);
@@ -86,7 +85,7 @@ export default function AddPillScreen() {
     }
   }, []);
 
-  const effectivePillType: PillType = frequency === 'as_needed' ? 'random' : pillType;
+  const effectivePillType: PillType = pillType === 'random' ? 'random' : (frequency === 'as_needed' ? 'random' : 'scheduled');
 
   const handleSave = async () => {
     if (!user) return;
@@ -130,19 +129,9 @@ export default function AddPillScreen() {
         pillType: effectivePillType,
         schedule,
         color: selectedColor,
+        preferredTimer: 'clearance',
         isActive: true,
       });
-
-      // For random pills ("Track a pill I just took"), record a dose immediately
-      // so the countdown timer starts
-      if (effectivePillType === 'random') {
-        await recordDose(
-          user.uid,
-          { id: pillId, drugName: drugName.trim(), halfLifeMinutes },
-          new Date(),
-          'manual',
-        );
-      }
 
       // Mark onboarding complete after first pill added
       if (user && !user.onboardingComplete) {
@@ -283,82 +272,84 @@ export default function AddPillScreen() {
           </View>
         )}
 
-        {/* Schedule section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIcon}>
-              <Typography variant="labelMd" color="onPrimary">3</Typography>
-            </View>
-            <Typography variant="titleMd">Schedule</Typography>
-          </View>
-
-          {/* Frequency toggles */}
-          <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-            Frequency
-          </Typography>
-          <View style={styles.freqRow}>
-            {FREQUENCY_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.value}
-                style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
-                onPress={() => setFrequency(opt.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: frequency === opt.value }}
-                accessibilityLabel={opt.label}
-              >
-                <Typography
-                  variant="labelMd"
-                  color={frequency === opt.value ? 'onPrimary' : 'onSurfaceVariant'}
-                >
-                  {opt.label}
-                </Typography>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Day picker for specific days */}
-          {frequency === 'specific_days' && (
-            <>
-              <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-                Select Days
-              </Typography>
-              <View style={styles.dayRow}>
-                {DAY_LABELS.map((label, i) => (
-                  <Pressable
-                    key={i}
-                    style={[styles.dayBtn, daysOfWeek.includes(i) && styles.dayBtnActive]}
-                    onPress={() => toggleDay(i)}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: daysOfWeek.includes(i) }}
-                    accessibilityLabel={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]}
-                  >
-                    <Typography
-                      variant="labelMd"
-                      color={daysOfWeek.includes(i) ? 'onPrimary' : 'onSurfaceVariant'}
-                    >
-                      {label}
-                    </Typography>
-                  </Pressable>
-                ))}
+        {/* Schedule section — only for stack (scheduled) pills */}
+        {pillType !== 'random' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Typography variant="labelMd" color="onPrimary">3</Typography>
               </View>
-            </>
-          )}
+              <Typography variant="titleMd">Schedule</Typography>
+            </View>
 
-          {/* Reminder time */}
-          {frequency !== 'as_needed' && (
-            <>
-              <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-                Reminder Time
-              </Typography>
-              <Input
-                label=""
-                placeholder="08:00"
-                value={timeOfDay}
-                onChangeText={setTimeOfDay}
-              />
-            </>
-          )}
-        </View>
+            {/* Frequency toggles */}
+            <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+              Frequency
+            </Typography>
+            <View style={styles.freqRow}>
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
+                  onPress={() => setFrequency(opt.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: frequency === opt.value }}
+                  accessibilityLabel={opt.label}
+                >
+                  <Typography
+                    variant="labelMd"
+                    color={frequency === opt.value ? 'onPrimary' : 'onSurfaceVariant'}
+                  >
+                    {opt.label}
+                  </Typography>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Day picker for specific days */}
+            {frequency === 'specific_days' && (
+              <>
+                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+                  Select Days
+                </Typography>
+                <View style={styles.dayRow}>
+                  {DAY_LABELS.map((label, i) => (
+                    <Pressable
+                      key={i}
+                      style={[styles.dayBtn, daysOfWeek.includes(i) && styles.dayBtnActive]}
+                      onPress={() => toggleDay(i)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: daysOfWeek.includes(i) }}
+                      accessibilityLabel={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]}
+                    >
+                      <Typography
+                        variant="labelMd"
+                        color={daysOfWeek.includes(i) ? 'onPrimary' : 'onSurfaceVariant'}
+                      >
+                        {label}
+                      </Typography>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* Reminder time */}
+            {frequency !== 'as_needed' && (
+              <>
+                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+                  Reminder Time
+                </Typography>
+                <Input
+                  label=""
+                  placeholder="08:00"
+                  value={timeOfDay}
+                  onChangeText={setTimeOfDay}
+                />
+              </>
+            )}
+          </View>
+        )}
 
         {/* Pill Color */}
         <View style={styles.section}>
@@ -396,7 +387,7 @@ export default function AddPillScreen() {
       {/* Fixed bottom CTA */}
       <View style={styles.bottomCTA}>
         <Button
-          title={effectivePillType === 'scheduled' ? 'Add to My Stack' : 'Start Tracking'}
+          title={effectivePillType === 'scheduled' ? 'Add to My Stack' : 'Add Pill'}
           onPress={handleSave}
           loading={saving}
         />

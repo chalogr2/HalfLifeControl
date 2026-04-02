@@ -166,6 +166,7 @@ function deserializePill(raw: Record<string, any>): Pill {
     pillType: raw.pillType,
     schedule: raw.schedule ?? null,
     color: raw.color ?? '#004d64',
+    preferredTimer: raw.preferredTimer ?? 'clearance',
     isActive: raw.isActive ?? true,
     createdAt: toDate(raw.createdAt),
     updatedAt: toDate(raw.updatedAt),
