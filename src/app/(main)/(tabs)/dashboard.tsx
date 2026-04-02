@@ -54,7 +54,8 @@ export default function DashboardScreen() {
   const sections = useMemo<Section[]>(() => {
     const s: Section[] = [];
     if (scheduledPills.length > 0) s.push({ title: 'My Daily Stack', data: scheduledPills });
-    if (randomPills.length > 0) s.push({ title: 'One-Time Tracking', data: randomPills });
+    // Always show the random section so users can add one-time pills
+    s.push({ title: 'One-Time Tracking', data: randomPills });
     return s;
   }, [scheduledPills, randomPills]);
 

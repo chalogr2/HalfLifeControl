@@ -34,12 +34,15 @@ export function eliminationProgress(takenAt: Date, halfLifeMinutes: number, now:
   return Math.min(1, Math.max(0, elapsed / totalMs));
 }
 
-/** Format minutes as "Xh Ym" or "Ym" if < 60 minutes. */
+/** Format minutes as "Xh Ym", "Ym Zs", or "Xh" depending on magnitude. */
 export function formatTimeRemaining(minutes: number): string {
   if (minutes <= 0) return 'Eliminated';
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  if (h === 0) return `${m}m`;
+  const totalSeconds = Math.round(minutes * 60);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h === 0 && m === 0) return `${s}s`;
+  if (h === 0) return `${m}m ${s}s`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 }

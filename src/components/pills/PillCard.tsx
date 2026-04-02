@@ -1,11 +1,12 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
 import { CountdownTimer } from './CountdownTimer';
 import { describeSchedule } from '@/core/scheduling';
 import type { Pill, Dose } from '@/core/types';
-import { spacing, MIN_TOUCH_TARGET } from '@/theme';
+import { colors, spacing, MIN_TOUCH_TARGET } from '@/theme';
 
 interface PillCardProps {
   pill: Pill;
@@ -44,12 +45,16 @@ export function PillCard({ pill, activeDose, nextDoseLabel, onPress }: PillCardP
             )}
           </View>
 
-          {activeDose && (
+          {activeDose ? (
             <CountdownTimer
               takenAt={activeDose.takenAt}
               halfLifeMinutes={activeDose.halfLifeMinutes}
               color={pill.color}
             />
+          ) : (
+            <View style={[styles.takeButton, { backgroundColor: pill.color }]}>
+              <Ionicons name="play" size={20} color="#fff" />
+            </View>
           )}
         </View>
       </Card>
@@ -71,5 +76,12 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  takeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
