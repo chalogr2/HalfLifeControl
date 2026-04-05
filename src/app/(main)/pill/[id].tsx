@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -203,7 +203,7 @@ export default function PillDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { pills, activeDoses, updatePill, deletePill, recordDose } = usePillStore();
+  const { pills, activeDoses, updatePill, deletePill, recordDose, setPillPreferredTimerLocal } = usePillStore();
 
   const pill = useMemo(() => pills.find((p) => p.id === id), [pills, id]);
   const activeDose: Dose | undefined = useMemo(() => {
@@ -217,6 +217,49 @@ export default function PillDetailScreen() {
   const [editingDosage, setEditingDosage] = useState(false);
   const [dosageText, setDosageText] = useState('');
 
+  // Timer selection is local-only while the screen is open, and persists exactly
+  // once on unmount if the value changed. This avoids racing concurrent Firestore
+  // transactions (which would hit failed-precondition errors and, via the store
+  // echo, snap the UI back to stale values mid-tap).
+  const [selectedTimer, setSelectedTimer] = useState<TimerType | undefined>(pill?.preferredTimer);
+  const initialTimerRef = useRef<TimerType | undefined>(pill?.preferredTimer);
+  const latestRef = useRef<{
+    selectedTimer: TimerType | undefined;
+    userId: string | undefined;
+    pillId: string | undefined;
+    wasDeleted: boolean;
+  }>({
+    selectedTimer: pill?.preferredTimer,
+    userId: user?.uid,
+    pillId: pill?.id,
+    wasDeleted: false,
+  });
+  latestRef.current.selectedTimer = selectedTimer;
+  latestRef.current.userId = user?.uid;
+  latestRef.current.pillId = pill?.id;
+
+  // Capture the baseline once the pill data is actually loaded (cold cache case).
+  useEffect(() => {
+    if (pill?.preferredTimer && initialTimerRef.current === undefined) {
+      initialTimerRef.current = pill.preferredTimer;
+      setSelectedTimer(pill.preferredTimer);
+    }
+  }, [pill?.preferredTimer]);
+
+  // Persist the selection once, on unmount, if it changed and the pill wasn't deleted.
+  useEffect(() => {
+    return () => {
+      const { selectedTimer: current, userId, pillId, wasDeleted } = latestRef.current;
+      if (wasDeleted) return;
+      if (!userId || !pillId || !current) return;
+      if (current === initialTimerRef.current) return;
+      // Fire-and-forget — screen is already gone, nothing to revert.
+      updatePill(userId, pillId, { preferredTimer: current }).catch(() => {});
+    };
+    // Mount-only: cleanup runs on unmount and reads from refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!pill) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -227,9 +270,13 @@ export default function PillDetailScreen() {
     );
   }
 
-  const handleSelectTimer = async (timerType: TimerType) => {
-    if (!user || pill.preferredTimer === timerType) return;
-    await updatePill(user.uid, pill.id, { preferredTimer: timerType });
+  const handleSelectTimer = (timerType: TimerType) => {
+    if (selectedTimer === timerType) return;
+    // Update local UI state (this screen) AND the Zustand store so the dashboard
+    // already reflects the new timer the moment the user returns. The actual
+    // Firestore/cache write happens once, on unmount, to avoid per-tap spam.
+    setSelectedTimer(timerType);
+    setPillPreferredTimerLocal(pill.id, timerType);
   };
 
   const handleDelete = () => {
@@ -243,6 +290,8 @@ export default function PillDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             if (!user) return;
+            // Prevent the unmount effect from writing preferredTimer to a deleted pill.
+            latestRef.current.wasDeleted = true;
             await deletePill(user.uid, pill.id);
             router.back();
           },
@@ -338,7 +387,7 @@ export default function PillDetailScreen() {
                   takenAt={activeDose.takenAt}
                   halfLifeMinutes={activeDose.halfLifeMinutes}
                   timerType={type}
-                  isSelected={pill.preferredTimer === type}
+                  isSelected={selectedTimer === type}
                   onPress={() => handleSelectTimer(type)}
                   pillColor={pill.color}
                 />
@@ -347,7 +396,7 @@ export default function PillDetailScreen() {
                   key={type}
                   halfLifeMinutes={pill.halfLifeMinutes}
                   timerType={type}
-                  isSelected={pill.preferredTimer === type}
+                  isSelected={selectedTimer === type}
                   onPress={() => handleSelectTimer(type)}
                 />
               ),

@@ -177,18 +177,6 @@ export default function DashboardScreen() {
           stickySectionHeadersEnabled={false}
         />
       )}
-
-      {/* FAB */}
-      <Pressable
-        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-        onPress={() => router.push('/(main)/pill/add')}
-        accessibilityLabel="Add medication"
-        accessibilityRole="button"
-      >
-        <Typography variant="displaySm" color="onPrimary" style={styles.fabIcon}>
-          +
-        </Typography>
-      </Pressable>
     </SafeAreaView>
   );
 }
@@ -243,27 +231,5 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     maxWidth: 260,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: spacing[3],
-    right: spacing[6],
-    width: 64,
-    height: 64,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  fabPressed: {
-    opacity: 0.85,
-  },
-  fabIcon: {
-    marginTop: -2,
   },
 });

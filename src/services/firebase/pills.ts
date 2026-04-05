@@ -484,10 +484,16 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
 // ─── WAL helpers ──────────────────────────────────────
 
 /**
- * Common pattern: enqueue operation → attempt Firestore write → dequeue on success.
+ * Common pattern: enqueue operation → fire Firestore write in background → dequeue on success.
  *
  * Order matters: WAL enqueue happens BEFORE cache update, so a crash between
  * the two can't leave optimistic local state without a corresponding WAL entry.
+ *
+ * The Firestore write is NOT awaited — once the WAL entry is durable (AsyncStorage),
+ * the local mutation is considered committed and callers can return immediately.
+ * Awaiting the network round-trip would block every UI update that follows a mutation
+ * (e.g. dashboard re-render after a pill edit) on ~hundreds of ms of Firestore latency.
+ * Failures leave the entry in the WAL and are retried on next app open.
  */
 async function enqueueAndAttempt(
   uid: string,
@@ -500,13 +506,10 @@ async function enqueueAndAttempt(
     createdAt: Date.now(),
   });
 
-  try {
-    await executeOperation(uid, operation);
-    await dequeueWrite(uid, entryId);
-  } catch (error) {
-    // Failed — entry stays in WAL, will be retried on next app open
-    captureException(error);
-  }
+  // Fire-and-forget: Firestore attempt runs in background, WAL retries on failure.
+  executeOperation(uid, operation)
+    .then(() => dequeueWrite(uid, entryId))
+    .catch(captureException);
 }
 
 /**
@@ -534,20 +537,19 @@ async function enqueueMultiple(
 }
 
 /**
- * Attempt Firestore writes for previously-enqueued WAL entries.
- * Dequeues each entry on success; leaves in WAL on failure.
+ * Fire Firestore writes for previously-enqueued WAL entries in the background.
+ * Dequeues each entry on success; leaves in WAL on failure for next-open retry.
+ * Not awaited — same rationale as enqueueAndAttempt: the WAL is the durable
+ * write, Firestore is just a sync target, so callers shouldn't block on the network.
  */
-async function attemptEnqueued(
+function attemptEnqueued(
   uid: string,
   entries: { id: string; operation: WriteOperation }[],
-): Promise<void> {
+): void {
   for (const { id, operation } of entries) {
-    try {
-      await executeOperation(uid, operation);
-      await dequeueWrite(uid, id);
-    } catch (error) {
-      captureException(error);
-    }
+    executeOperation(uid, operation)
+      .then(() => dequeueWrite(uid, id))
+      .catch(captureException);
   }
 }
 
@@ -673,8 +675,8 @@ export async function recordDose(
   await setCachedDashboard(uid, serializeDashboard(dashboard));
   await updateHistoryCache(uid, month, newDose);
 
-  // Attempt both Firestore writes (failures stay in WAL)
-  await attemptEnqueued(uid, entries);
+  // Fire Firestore writes in background (failures stay in WAL for next-open retry)
+  attemptEnqueued(uid, entries);
 
   return { id: newDose.id, dashboard };
 }
@@ -721,10 +723,10 @@ export async function updateDoseStatus(
     }
   }
 
-  // Enqueue all operations atomically, then attempt
+  // Enqueue all operations atomically, then fire Firestore writes in background
   const entries = await enqueueMultiple(uid, operations);
   await setCachedDashboard(uid, serializeDashboard(dashboard));
-  await attemptEnqueued(uid, entries);
+  attemptEnqueued(uid, entries);
 
   return dashboard;
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Pill, Dose, DoseSource, DashboardDocument } from '@/core/types';
+import type { Pill, Dose, DoseSource, DashboardDocument, TimerType } from '@/core/types';
 import {
   loadDashboard,
   addPill as fbAddPill,
@@ -26,6 +26,13 @@ interface PillState {
   addPill: (userId: string, pill: Omit<Pill, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updatePill: (userId: string, pillId: string, data: Partial<Omit<Pill, 'id' | 'createdAt'>>) => Promise<void>;
   deletePill: (userId: string, pillId: string) => Promise<void>;
+
+  /**
+   * Synchronous in-memory update of a pill's preferred timer. Used to give the
+   * dashboard instant feedback while the user is still on the detail screen;
+   * the actual Firestore/cache write happens separately (on detail-screen unmount).
+   */
+  setPillPreferredTimerLocal: (pillId: string, timerType: TimerType) => void;
 
   // Doses
   recordDose: (
@@ -78,6 +85,14 @@ export const usePillStore = create<PillState>((set) => ({
   updatePill: async (userId, pillId, data) => {
     const dashboard = await fbUpdatePill(userId, pillId, data);
     applyDashboard(set, dashboard);
+  },
+
+  setPillPreferredTimerLocal: (pillId, timerType) => {
+    set((state) => ({
+      pills: state.pills.map((p) =>
+        p.id === pillId ? { ...p, preferredTimer: timerType } : p,
+      ),
+    }));
   },
 
   deletePill: async (userId, pillId) => {
