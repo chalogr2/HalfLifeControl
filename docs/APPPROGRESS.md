@@ -1,5 +1,7 @@
 # HalfLifeControl — App Progress Log
 
+> **Backend migration in progress (2026-04)**: HalfLifeControl is moving from Firebase to Supabase. All entries below this banner were written during the Firebase era and remain as a historical record. The migration plan is documented in **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)**. New progress entries after the migration will note "Supabase" where relevant.
+
 This document records every step taken to build the app, in exact detail, so that any AI agent (Codex, Sonnet, Opus) or developer can understand what was done, why, and how to continue.
 
 ---

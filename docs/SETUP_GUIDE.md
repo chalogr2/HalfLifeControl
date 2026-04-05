@@ -2,13 +2,15 @@
 
 This guide covers everything you need to set up manually before we start coding. Complete these steps in order — later steps depend on earlier ones.
 
+> **Backend note (2026-04)**: HalfLifeControl is migrating from Firebase to Supabase. The **primary, current source of truth** for backend setup is **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 8**, which contains a complete step-by-step Supabase setup. Section 3 below has been replaced with a short pointer to that document. Every other section (Expo, Apple, Google Play, RevenueCat, Sentry) is unchanged and still applies.
+
 ---
 
 ## Table of Contents
 
 1. [Prerequisites (Install These First)](#1-prerequisites)
 2. [Expo / EAS Account](#2-expo--eas-account)
-3. [Firebase Project](#3-firebase-project)
+3. [Supabase Project](#3-supabase-project)
 4. [Apple Developer Account](#4-apple-developer-account)
 5. [Google Play Developer Account](#5-google-play-developer-account)
 6. [RevenueCat (Subscriptions)](#6-revenuecat)
@@ -47,21 +49,25 @@ You already have Git installed and your repo connected. Nothing to do here.
    eas --version
    ```
 
-### 1.4 Firebase CLI
+### 1.4 Supabase CLI (optional, recommended)
+
+Not required to run the app, but worth installing so future schema changes live in version-controlled migration files instead of ad-hoc runs in the dashboard SQL editor.
 
 1. In your terminal, run:
    ```
-   npm install -g firebase-tools
+   npm install -g supabase
    ```
 2. Verify:
    ```
-   firebase --version
+   supabase --version
    ```
-3. Log in:
+3. Log in (only needed once you want to push migrations):
    ```
-   firebase login
+   supabase login
    ```
-   This opens a browser window — sign in with the Google account you'll use for Firebase.
+   This opens a browser window — paste the generated token back into the terminal.
+
+Detailed usage is covered in [`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 8.10.
 
 ### 1.5 Java Development Kit (JDK) — needed for Android builds
 
@@ -100,95 +106,32 @@ Should show your username.
 
 ---
 
-## 3. Firebase Project
+## 3. Supabase Project
 
-Firebase provides authentication, database (Firestore), push notifications (FCM), and Cloud Functions.
+Supabase provides our backend: Postgres database, authentication, and Row-Level Security. It replaces Firebase (Auth + Firestore + Cloud Functions + FCM).
 
-### 3.1 Create the Firebase project
+**The complete, authoritative Supabase setup lives in [`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 8**. That guide walks you through, click by click:
 
-1. Go to https://console.firebase.google.com
-2. Click **"Create a project"** (or "Add project")
-3. Project name: **`HalfLifeControl`**
-4. **Enable Google Analytics** — select "Default Account for Firebase" (or create one). Analytics is useful for tracking user behavior and is free.
-5. Wait for the project to be created, then click **Continue**
+- 8.1 Creating a Supabase account
+- 8.2 Creating the project (region, database password, free plan)
+- 8.3 Copying the project URL and anon key
+- 8.4 Applying the schema (SQL migration with pills, doses, profiles, RLS policies, triggers)
+- 8.5 Verifying Row-Level Security is enabled
+- 8.6 Configuring email/password authentication
+- 8.7 Testing the setup with a throwaway user
+- 8.8 Wiping the old Firebase debug data (optional but recommended)
+- 8.9 Saving the values you'll give me
+- 8.10 Installing the Supabase CLI (optional)
 
-### 3.2 Upgrade to Blaze plan (required for Cloud Functions)
+When you finish Section 8 you will have:
 
-1. In the Firebase console, click the **gear icon** (bottom-left) > **Usage and billing** > **Details & settings**
-2. Click **"Modify plan"** and select **Blaze (pay as you go)**
-3. Add a billing account (credit card required)
-4. **Cost note**: The Blaze plan has a generous free tier. For development and early users, you will likely pay $0. Firebase charges only for usage beyond the free quotas. Cloud Functions require Blaze but won't cost anything during development.
+- A Supabase project URL (for `EXPO_PUBLIC_SUPABASE_URL`)
+- A Supabase `anon` public key (for `EXPO_PUBLIC_SUPABASE_ANON_KEY`)
+- A working schema with `profiles`, `pills`, and `doses` tables
+- RLS policies enforced on every table
+- A verified signup flow that auto-creates a profile row via a Postgres trigger
 
-### 3.3 Enable Authentication
-
-1. In the Firebase console sidebar, click **Build** > **Authentication**
-2. Click **"Get started"**
-3. Under **Sign-in method**, enable:
-   - **Email/Password** — click it, toggle **Enable** on, click **Save**
-4. (We'll add Google and Apple sign-in later in Phase 6)
-
-### 3.4 Enable Firestore
-
-1. In the sidebar, click **Build** > **Firestore Database**
-2. Click **"Create database"**
-3. Choose a location closest to your target users:
-   - For US users: **`us-central1` (Iowa)** or **`us-east1` (South Carolina)**
-   - **Important**: This cannot be changed later. Pick carefully.
-4. Start in **Production mode** (we'll deploy proper security rules from code)
-5. Click **Create**
-
-### 3.5 Register an Android app
-
-1. In the Firebase console, click the **gear icon** next to "Project Overview" > **Project settings**
-2. Scroll down to **"Your apps"** and click the **Android icon**
-3. Android package name: **`com.halflifecontrol.app`**
-   - This must match what we'll set in `app.json`. Use exactly this value.
-4. App nickname: **HalfLifeControl**
-5. Skip the SHA-1 for now (we'll add it later for Google Sign-In)
-6. Click **Register app**
-7. Download **`google-services.json`**
-8. **Save this file** — you'll place it in the project root later. I'll tell you when.
-
-### 3.6 Register an iOS app
-
-1. Still in Project settings > Your apps, click the **iOS icon**
-2. Apple bundle ID: **`com.halflifecontrol.app`**
-   - This must also match what we'll set in `app.json`.
-3. App nickname: **HalfLifeControl**
-4. Skip the App Store ID for now
-5. Click **Register app**
-6. Download **`GoogleService-Info.plist`**
-7. **Save this file** alongside the Android one.
-
-### 3.7 Enable Cloud Messaging (FCM)
-
-1. In Project settings, click the **Cloud Messaging** tab
-2. If you see a banner saying "Cloud Messaging API (Legacy) is disabled", that's fine — we use the v1 API which is enabled by default
-3. Note: iOS push notifications require an APNs key (covered in Section 4)
-
-### 3.8 Set up Cloud Functions (just init — we'll write code later)
-
-No action needed yet. I'll initialize Firebase Functions in the project when we start coding. Just make sure you completed Step 3.2 (Blaze plan).
-
-### 3.9 Copy your Firebase config values
-
-1. Go to **Project settings** > **General** tab
-2. Scroll down to your **Web app** section. If you don't see one, click **"Add app"** > **Web** (`</>` icon):
-   - Nickname: **HalfLifeControl Web**
-   - Skip Firebase Hosting
-   - Click **Register app**
-3. You'll see a config object like this:
-   ```javascript
-   const firebaseConfig = {
-     apiKey: "AIzaSy...",
-     authDomain: "halflifecontrol.firebaseapp.com",
-     projectId: "halflifecontrol",
-     storageBucket: "halflifecontrol.appspot.com",
-     messagingSenderId: "123456789",
-     appId: "1:123456789:web:abc123",
-   };
-   ```
-4. **Copy and save all these values.** You'll give them to me to put in the `.env` file.
+**Important**: iOS and Android builds do NOT require any platform-specific config file from Supabase (unlike Firebase's `google-services.json` and `GoogleService-Info.plist`). Supabase works entirely through the JS SDK plus two environment variables. This simplifies the setup considerably.
 
 ---
 
@@ -215,7 +158,9 @@ Required for: iOS builds, App Store submission, Apple Sign-In, push notification
    - **Sign In with Apple** (we'll use this in Phase 6)
 7. Click **Continue** > **Register**
 
-### 4.3 Create an APNs Key (for push notifications)
+### 4.3 Create an APNs Key (for push notifications — only if/when we add server push)
+
+> **Note**: With the Supabase migration we no longer have FCM as a push backend. Push notifications are **not part of the current migration scope** — the app relies on `expo-notifications` (local) only. If and when we add server-initiated push, we will revisit this step and configure an APNs key at that time. You can skip 4.3 and 4.4 for now.
 
 1. Go to https://developer.apple.com/account/resources/authkeys/list
 2. Click the **"+"** button
@@ -226,19 +171,14 @@ Required for: iOS builds, App Store submission, Apple Sign-In, push notification
 7. Note the **Key ID** shown on the page
 8. Also note your **Team ID** — visible at the top-right of the developer portal, or at https://developer.apple.com/account under Membership details
 
-### 4.4 Upload the APNs key to Firebase
+### 4.4 (Deferred) Upload the APNs key to your push backend
 
-1. Go to Firebase console > **Project settings** > **Cloud Messaging** tab
-2. Under **Apple app configuration**, click **Upload** next to "APNs Authentication Key"
-3. Upload the `.p8` file you just downloaded
-4. Enter the **Key ID** and your **Team ID**
-5. Click **Upload**
+Skipped until server push is reintroduced. Keep the `.p8` file safe if you created one.
 
 ### 4.5 Values to save
 
 Write down:
 - **Team ID**: (from Apple developer portal)
-- **Key ID**: (from the APNs key you created)
 - **Bundle ID**: `com.halflifecontrol.app`
 
 ---
@@ -407,21 +347,15 @@ Sentry captures crashes and errors in production. This is a Phase 6 task but you
 
 Once you've completed the steps above, you'll need to provide me with these values so I can configure the project. I'll store them securely in a `.env` file (gitignored).
 
-### Firebase (from Section 3.9)
-- [ ] `FIREBASE_API_KEY`
-- [ ] `FIREBASE_AUTH_DOMAIN`
-- [ ] `FIREBASE_PROJECT_ID`
-- [ ] `FIREBASE_STORAGE_BUCKET`
-- [ ] `FIREBASE_MESSAGING_SENDER_ID`
-- [ ] `FIREBASE_APP_ID`
-
-### Firebase config files (from Sections 3.5 and 3.6)
-- [ ] `google-services.json` (Android)
-- [ ] `GoogleService-Info.plist` (iOS)
+### Supabase (from [`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 8.3)
+- [ ] `EXPO_PUBLIC_SUPABASE_URL`
+- [ ] `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- [ ] Confirmation that RLS is enabled on `profiles`, `pills`, `doses` (Section 8.5)
+- [ ] Confirmation that the `handle_new_user` trigger auto-creates a profile row on signup (Section 8.7)
 
 ### Apple (from Section 4.5)
 - [ ] Apple Team ID
-- [ ] APNs Key ID
+- [ ] Bundle ID: `com.halflifecontrol.app`
 
 ### Google Play (from Section 5.3)
 - [ ] `google-play-key.json` (for EAS Submit)
@@ -442,10 +376,12 @@ Once you've completed the steps above, you'll need to provide me with these valu
 
 Once you give me the values above, I will:
 
-- Create the `.env` and `.env.example` files
-- Place `google-services.json` and `GoogleService-Info.plist` in the right locations
-- Configure `app.json` / `eas.json` with all the correct identifiers
-- Write Firestore security rules and deploy instructions
+- Create/update the `.env` and `.env.example` files with Supabase keys
+- Install `@supabase/supabase-js` and `react-native-url-polyfill`
+- Wire the Supabase client in `src/services/supabase/config.ts` with the AsyncStorage session adapter
+- Rewrite the service layer and point the Zustand stores at it
+- Delete the old Firebase code (`src/services/firebase/`, `functions/`, `firestore.rules`, `firestore.indexes.json`)
+- Configure `app.json` / `eas.json` with the correct identifiers (no Firebase plugin needed)
 - Set up the entire codebase, project structure, and all configurations
 - Configure CI/CD (GitHub Actions)
 

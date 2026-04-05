@@ -2,124 +2,70 @@
 
 Everything in this document requires **your personal action** — creating accounts, entering secrets, reviewing content, or making decisions that code agents cannot do for you. Items are grouped by urgency.
 
+> **Backend migration in progress (2026-04)**: HalfLifeControl is moving from Firebase to Supabase. Backend setup is now covered end-to-end in **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)**. Items 1–4 below have been rewritten to point at that guide. Everything else in this document (drug DB review, legal content, icons, EAS login, RevenueCat, Sentry, etc.) is unchanged.
+
 ---
 
 ## BLOCKING: Required Before the App Can Run
 
-### 1. Create `.env` file with Firebase config
+### 1. Complete Supabase setup and collect the two env values
 
-Copy `.env.example` to `.env` and fill in all 6 Firebase values from your Firebase Console (Project Settings > General > Web app):
+Follow **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 8** end-to-end. At the end of Section 8 you should have:
+
+- A Supabase project created on the Free plan, in the region closest to your primary users
+- The schema from Section 4 of that document applied via the SQL Editor
+- RLS enabled and verified on `profiles`, `pills`, and `doses`
+- Email/password auth enabled with email confirmation temporarily off (dev only)
+- A throwaway test user created and deleted to verify the `handle_new_user` trigger works
+
+Then copy these two values out of **Project Settings → API** in the Supabase dashboard:
 
 ```
-EXPO_PUBLIC_FIREBASE_API_KEY=AIza...
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=halflifecontrol.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=halflifecontrol
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=halflifecontrol.appspot.com
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
-EXPO_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
+EXPO_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ... (the "anon public" key, NOT service_role)
 ```
 
-**Where**: Firebase Console > Project Settings > General > Your apps > Web app (</>) > `firebaseConfig` object.
+The assistant will paste these into `.env` and wire them through `src/services/supabase/config.ts` once the code migration begins.
 
-**File that reads these**: `src/services/firebase/config.ts` (lines 6-11)
+**File that will read these (after migration)**: `src/services/supabase/config.ts`
 
-**Status**: [ ] Not done
+**Status**: [ ] Supabase project created / [ ] Schema applied / [ ] RLS verified / [ ] Env values collected
 
 ---
 
-### 2. Place Firebase config files in project root
+### 2. (Removed) Firebase config files no longer required
 
-These are gitignored and must exist locally:
+Supabase does not use per-platform config files like Firebase's `google-services.json` or `GoogleService-Info.plist`. The Supabase JS SDK works on both Android and iOS with nothing but the URL and anon key from Section 1.
 
-| File | Source | Needed for |
-|------|--------|------------|
-| `google-services.json` | Firebase Console > Project Settings > Android app > Download | Android builds |
-| `GoogleService-Info.plist` | Firebase Console > Project Settings > iOS app > Download | iOS builds (Phase 7) |
+If `google-services.json` or `GoogleService-Info.plist` still exist in your project root as leftovers, the assistant will delete them during the code migration.
 
-**Status**: [ ] `google-services.json` placed / [ ] `GoogleService-Info.plist` placed
+**Status**: [x] Not applicable after migration
 
 ---
 
-### 3. Firestore Security Rules (Updated for optimized schema)
+### 3. Row-Level Security policies (replaces Firestore Rules)
 
-There is **no `firestore.rules` file** in the project. Your Firestore database currently uses whatever rules you set during setup (likely test mode which expires, or locked mode which blocks everything).
+Security is now enforced at the Postgres level via RLS policies that live in the schema migration file (`supabase/migrations/0001_initial.sql`). The policies are simple:
 
-**Action required**: Deploy these rules via Firebase Console > Firestore > Rules:
+- `profiles_own`: `auth.uid() = id`
+- `pills_own`: `auth.uid() = user_id`
+- `doses_own`: `auth.uid() = user_id`
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      // Users can read their own profile
-      allow read: if request.auth != null && request.auth.uid == userId;
-      // Users can write their own profile, EXCEPT subscriptionTier
-      // (subscriptionTier should only be set by Cloud Functions — see note below)
-      allow write: if request.auth != null && request.auth.uid == userId
-        && (!('subscriptionTier' in request.resource.data)
-            || request.resource.data.subscriptionTier == resource.data.subscriptionTier);
+Each policy covers all operations (SELECT, INSERT, UPDATE, DELETE) for the row's owner.
 
-      // Dashboard document (single-doc vault: pills + active doses)
-      match /data/{docId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        // Enforce free tier pill limits: 1 scheduled + 4 random
-        allow write: if request.auth != null && request.auth.uid == userId
-          && (
-            // Pro users: no limit
-            get(/databases/$(database)/documents/users/$(userId)).data.subscriptionTier == 'pro'
-            // Free users: per-type limits
-            || (request.resource.data.activeScheduledCount <= 1
-                && request.resource.data.activeRandomCount <= 4)
-            // Allow writes that don't increase counts (e.g. recording doses, deleting pills)
-            || (request.resource.data.activeScheduledCount <= resource.data.activeScheduledCount
-                && request.resource.data.activeRandomCount <= resource.data.activeRandomCount)
-          );
-      }
+**Pill limit enforcement** (free tier: 1 scheduled + 4 simultaneous random) lives in `src/core/subscription.ts` client-side for now. A Postgres `BEFORE INSERT` trigger for server-side enforcement is documented as a follow-up in `MIGRATIONTOSUPABASE.md` and will be added only if client-side bypass becomes a real concern.
 
-      // Monthly history buckets
-      match /history/{monthId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-    }
-  }
-}
-```
+**Subscription tier syncing** (RevenueCat → `profiles.subscription_tier`) will be handled by a Supabase Edge Function in Phase 5. Until then, the client writes the tier directly — which works because the client is trusted at this stage. No webhook deployment is required for the initial migration.
 
-**Important changes from previous rules:**
-- **`activeScheduledCount` / `activeRandomCount`** are used instead of `pills.size()`. These denormalized counters only count active (non-deleted) pills by type, matching the GAMEPLAN spec: free = 1 scheduled + 4 random, pro = unlimited.
-- **`subscriptionTier` is locked** in the user profile — clients cannot change it directly. See the Cloud Function requirement below.
-- The third condition allows writes that don't increase either count (doses, deletions, updates).
-
-**SECURITY NOTE — subscriptionTier requires a Cloud Function:**
-The rules above block the client from changing `subscriptionTier`, which means you **must** deploy the Cloud Function in `functions/src/index.ts` that sets this field when RevenueCat reports a subscription change. Without this, the tier will remain `free` even after purchase.
-
-**Deployment steps:**
-```bash
-cd functions && npm install && npm run build
-firebase functions:config:set revenuecat.webhook_secret="YOUR_SECRET"
-firebase deploy --only functions
-```
-
-Then in RevenueCat dashboard > Integrations > Webhooks, set the URL to your function endpoint and the same shared secret.
-
-**Client-side sync (temporary fallback):** The client (`useSubscriptionStore`) still calls `updateSubscriptionTier()` as a fallback. With the rules above, this write will be rejected by Firestore. Once the Cloud Function is deployed, you can remove the client-side sync call entirely. Until then, if you need subscriptions to work without the Cloud Function, temporarily relax the `subscriptionTier` lock in the rules — but this is insecure.
-
-**Status**: [ ] Rules deployed / [ ] Cloud Function deployed
+**Status**: [x] RLS applied via schema migration (verified in Section 8.5 of the migration guide)
 
 ---
 
-### 4. Deploy Firestore Index Exemptions
+### 4. (Removed) Firestore index exemptions no longer required
 
-The project includes `firestore.indexes.json` in the repo root. This file disables auto-indexing on array fields (`pills`, `activeDoses`, `doses`) that are never queried individually — saving storage and write costs.
+Supabase/Postgres uses standard B-tree indexes, declared inline in the schema migration (see Section 4 of `MIGRATIONTOSUPABASE.md`). There is no equivalent of Firestore's array-field index exemptions because Postgres does not auto-index anything.
 
-**Action**: Deploy the index config to your Firebase project:
-```bash
-firebase deploy --only firestore:indexes
-```
-
-**Prerequisite**: You need the Firebase CLI installed (`npm install -g firebase-tools`) and logged in (`firebase login`). If you haven't initialized Firebase in this project yet, run `firebase init firestore` and select your project — but **do not** overwrite `firestore.indexes.json` when prompted.
-
-**Status**: [ ] Index exemptions deployed
+**Status**: [x] Not applicable after migration
 
 ---
 
@@ -258,47 +204,19 @@ Code is built and gracefully degrades without API keys. You need to set up Reven
 
 Google Sign-In code is built. Apple Sign-In is deferred to Phase 7 (no Mac). Sentry service gracefully degrades when DSN not set.
 
-#### 13. Enable Google Sign-In in Firebase Console
+#### 13. (Deferred) Google Sign-In — will be re-wired post-migration
 
-1. Go to **Firebase Console > Authentication > Sign-in method**
-2. Click **Google** > Enable it
-3. Note the **Web client ID** — this is shown in the Google provider config
+Google Sign-In is deferred to a follow-up after the Supabase migration is complete. Supabase supports Google OAuth natively; the setup will be different from the old Firebase flow. No action needed now.
 
-**Action**: Paste the Web client ID into `.env` as:
-```
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=123456789-abc.apps.googleusercontent.com
-```
-
-**File that reads this**: `src/services/firebase/googleAuth.ts` (line 18)
-
-**Status**: [ ] Google Sign-In enabled in Firebase / [ ] Web client ID in `.env`
+**Status**: [ ] Deferred to post-migration follow-up
 
 ---
 
-#### 14. Download `google-services.json` (REQUIRED for Android build)
+#### 14. (Removed) `google-services.json` no longer required
 
-The Google Sign-In native module requires `google-services.json` in the project root.
+Supabase does not require `google-services.json`. The old Firebase Android config file can be deleted if it still exists in the project root.
 
-1. Go to **Firebase Console > Project Settings > General > Your apps**
-2. If no Android app exists, click **Add app** > Android
-   - Package name: `com.halflifecontrol.app`
-   - Debug signing certificate SHA-1: get it from EAS with `eas credentials` or from your local debug keystore
-3. Download `google-services.json` and place it in the **project root** (next to `package.json`)
-
-**Important**: You MUST add the SHA-1 fingerprint for Google Sign-In to work on Android. Without it, the sign-in will fail silently.
-
-To get your debug SHA-1 from Android Studio:
-```bash
-# Windows (default debug keystore)
-keytool -list -v -keystore "%USERPROFILE%\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android
-```
-
-Or from EAS:
-```bash
-eas credentials --platform android
-```
-
-**Status**: [ ] `google-services.json` placed / [ ] SHA-1 fingerprint added to Firebase
+**Status**: [x] Not applicable after migration
 
 ---
 
@@ -381,8 +299,7 @@ The `app.json` references these icon files. The build will fail if they don't ex
 | Mac available for Xcode builds | [ ] (expected ~early April 2026) |
 | Apple Developer account enrolled ($99/year) | [ ] |
 | App ID created with push + Sign-In capabilities | [ ] |
-| APNs key created and uploaded to Firebase | [ ] |
-| `GoogleService-Info.plist` placed in root | [ ] |
+| APNs key created (see Section 4.3 of SETUP_GUIDE.md — deferred) | [ ] |
 | EAS submit iOS config added to `eas.json` | [ ] |
 
 ---
@@ -391,15 +308,8 @@ The `app.json` references these icon files. The build will fail if they don't ex
 
 ```bash
 # BLOCKING — app won't start without these
-EXPO_PUBLIC_FIREBASE_API_KEY=           # Firebase Console > Web app config
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=       # Firebase Console > Web app config
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=        # Firebase Console > Web app config
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=    # Firebase Console > Web app config
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID= # Firebase Console > Web app config
-EXPO_PUBLIC_FIREBASE_APP_ID=            # Firebase Console > Web app config
-
-# Phase 6 — needed for Google Sign-In
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=       # Firebase Console > Auth > Google provider > Web client ID
+EXPO_PUBLIC_SUPABASE_URL=              # Supabase Dashboard > Project Settings > API
+EXPO_PUBLIC_SUPABASE_ANON_KEY=         # Supabase Dashboard > Project Settings > API (anon public key)
 
 # Phase 5 — needed for subscriptions
 EXPO_PUBLIC_REVENUECAT_APPLE_KEY=       # RevenueCat > Project > API Keys
@@ -416,6 +326,4 @@ EXPO_PUBLIC_SENTRY_DSN=                 # Sentry > Project > Client Keys
 | File | Source | When needed |
 |------|--------|-------------|
 | `.env` | Copy from `.env.example`, fill values | Now |
-| `google-services.json` | Firebase Console > Android app | Android builds |
-| `GoogleService-Info.plist` | Firebase Console > iOS app | iOS builds (Phase 7) |
 | `google-play-key.json` | Google Play Console > API Access | Play Store submission |

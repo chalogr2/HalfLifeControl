@@ -85,15 +85,17 @@ Located at `docs/stitch_halflifecontrol_react/`. A single-file React SPA (`code.
 
 ## Tech Stack
 
+> **Backend migration (2026-04)**: HalfLifeControl has migrated from Firebase to Supabase. See [`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) for the full migration plan.
+
 | Layer | Choice | Why |
 |-------|--------|-----|
 | Framework | **React Native + Expo (SDK 52)** | Cross-platform, large ecosystem, user's preference |
 | Routing | **Expo Router v4** | File-based, deep linking, type-safe |
 | State | **Zustand** | Minimal boilerplate, persistence support, testable |
-| Backend | **Firebase** (Auth, Firestore, Cloud Functions, FCM) | Fast to build, built-in offline, push notifications |
+| Backend | **Supabase** (Postgres, Auth, RLS, Edge Functions) | Predictable pricing, row-level updates, RLS security, no per-read/write billing |
 | Drug Data | **openFDA API** + curated half-life JSON + manual fallback | openFDA alone lacks reliable half-life data |
 | Subscriptions | **RevenueCat** | Handles both App Store + Google Play, webhook sync |
-| Notifications | **expo-notifications** (local, primary) + **FCM** (push, backup) | Local works offline; FCM covers app-killed scenarios |
+| Notifications | **expo-notifications** (local) | Local works offline; server push deferred to follow-up |
 | Testing | **Jest** + **React Native Testing Library** + **Maestro** (E2E) | |
 | CI/CD | **GitHub Actions** + **EAS Build/Submit** | |
 
@@ -104,7 +106,7 @@ Located at `docs/stitch_halflifecontrol_react/`. A single-file React SPA (`code.
 ```
 HalfLifeControl/                    # Repository root
 ├── .gitignore                      # Git ignore rules
-├── .env                            # Environment variables — Firebase keys, RevenueCat keys, etc. (gitignored)
+├── .env                            # Environment variables — Supabase URL/key, RevenueCat keys, etc. (gitignored)
 ├── .env.example                    # Template showing required env vars (committed, no real values)
 ├── app.json                        # Expo app configuration (app name, bundle ID, plugins, splash screen)
 ├── eas.json                        # EAS Build profiles (development, preview, production)
@@ -151,7 +153,7 @@ HalfLifeControl/                    # Repository root
 │   │   ├── subscription.ts         # Tier checks, entitlement helpers
 │   │   └── types.ts                # Domain types: Pill, Dose, Schedule
 │   ├── services/                   # External service integrations
-│   │   ├── firebase/               # config, auth, firestore CRUD
+│   │   ├── supabase/               # config, auth, database CRUD
 │   │   ├── openfda/                # API client, types, halflife-supplement.ts (curated JSON)
 │   │   ├── notifications/          # scheduler, response handlers
 │   │   └── revenue-cat/            # config, purchase/restore/check
@@ -162,42 +164,48 @@ HalfLifeControl/                    # Repository root
 │
 ├── assets/                         # Static assets: images, fonts, Lottie animations
 │
-├── functions/                      # Firebase Cloud Functions (server-side)
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts
-│       ├── notifications.ts        # Scheduled push notification triggers
-│       └── subscriptions.ts        # RevenueCat webhook handler
+├── supabase/                       # Supabase project config and migrations
+│   └── migrations/
+│       └── 0001_initial.sql        # Schema: profiles, pills, doses, RLS, triggers, indexes
 │
 └── __tests__/                      # Test files (unit, component, integration)
 ```
 
 ---
 
-## Firestore Schema
+## Supabase Schema (Postgres)
+
+> Full SQL migration lives in `supabase/migrations/0001_initial.sql`. See [`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md) Section 4 for the complete DDL.
 
 ```
-users/{userId}
-  ├── email, displayName, createdAt
-  ├── onboardingComplete: boolean
-  ├── subscriptionTier: "free" | "pro"
-  ├── notificationToken: string (FCM)
-  ├── settings: { autoAssumeTaken, notificationsEnabled }
-  │
-  ├── pills/{pillId}  (subcollection)
-  │   ├── drugName, drugId, halfLifeMinutes, dosageMg, dosageUnit
-  │   ├── pillType: "scheduled" | "random"
-  │   ├── schedule: { timeOfDay, frequency, daysOfWeek?, intervalDays? }  // null for random
-  │   ├── color (visual ID), isActive
-  │
-  └── doses/{doseId}  (subcollection)
-      ├── pillId, drugName (denormalized)
-      ├── takenAt, scheduledFor, eliminationAt (precomputed: takenAt + 5×halfLife)
-      ├── halfLifeMinutes (snapshot at dose time)
-      ├── status: "active" | "dismissed" | "completed"
-      ├── source: "manual" | "notification" | "auto" | "retroactive"
+profiles
+  ├── id (uuid, PK, references auth.users)
+  ├── email, display_name, created_at
+  ├── onboarding_complete: boolean
+  ├── subscription_tier: "free" | "pro"
+  ├── settings: jsonb { autoAssumeTaken, notificationsEnabled }
+
+pills
+  ├── id (uuid, PK)
+  ├── user_id (uuid, FK → profiles.id)
+  ├── drug_name, drug_id, half_life_minutes, dosage_mg, dosage_unit
+  ├── pill_type: "scheduled" | "random"
+  ├── schedule: jsonb { timeOfDay, frequency, daysOfWeek?, intervalDays? }
+  ├── color, is_active, preferred_timer
+  ├── created_at, updated_at
+
+doses
+  ├── id (uuid, PK)
+  ├── user_id (uuid, FK → profiles.id)
+  ├── pill_id (uuid, FK → pills.id)
+  ├── drug_name (denormalized)
+  ├── taken_at, scheduled_for, elimination_at
+  ├── half_life_minutes
+  ├── status: "active" | "dismissed" | "completed"
+  ├── source: "manual" | "notification" | "auto" | "retroactive"
 ```
+
+**RLS**: Every table has `auth.uid() = user_id` (or `= id` for profiles) policies covering all operations. No cross-user access is possible.
 
 ---
 
@@ -209,7 +217,7 @@ users/{userId}
 - `eliminationAt = takenAt + 5 × halfLifeMinutes` — drug is ~97% eliminated after 5 half-lives
 - A `useCountdown` hook runs a 1-second `setInterval` while foregrounded; on background→foreground, the math catches up instantly
 - `ProgressRing` component shows a depleting circular arc + "4h 23m left" text
-- `eliminationAt` is stored in Firestore so the dashboard queries `where("status", "==", "active")` efficiently
+- `elimination_at` is stored in the `doses` table so the dashboard queries `status = 'active'` efficiently
 
 **Drug half-life data** — 3-tier fallback:
 1. **Curated JSON** shipped with the app (top 200 drugs with verified half-lives)
@@ -254,8 +262,8 @@ Key UX principles for elderly users:
 - Shows: pill name, countdown ring, "Tracked 2h ago"
 - These auto-archive when countdown completes
 
-### "Add Pill" — Floating Action Button (bottom-right)
-- Tapping opens a bottom sheet: "Add to my stack" vs "Track a pill I just took"
+### Adding pills — in-list buttons
+- Each section has an "Add pill to stack" or "Track another pill" button at the bottom of its list
 - **"Track a pill I just took"**: search drug → set dose → optionally "I took it X hours ago" → countdown starts
 - **"Add to my stack"**: search drug → set schedule + dose → appears in stack section
 
@@ -266,8 +274,8 @@ Key UX principles for elderly users:
 - **Local notifications** (expo-notifications) are primary — scheduled at pill creation time
 - Multiple pills at same time → grouped into one notification: "Time to take Aspirin, Metformin"
 - Action buttons on notification: **"Took it"** (starts countdown) and **"Snooze 15min"**
-- **Auto-assume mode**: user setting that skips notifications and auto-creates dose records at scheduled times (via Cloud Function)
-- **FCM backup**: Cloud Function runs every 5 minutes, sends push for due pills when app is killed
+- **Auto-assume mode**: user setting that skips notifications and auto-creates dose records at scheduled times (via Supabase Edge Function — deferred to follow-up)
+- **Server push**: Deferred. The app currently uses local notifications only. Server-initiated push (via Supabase Edge Functions + APNs/FCM) will be added in a future phase
 
 ---
 
@@ -281,7 +289,7 @@ Key UX principles for elderly users:
 
 - Enforced in `src/core/subscription.ts` (pure functions)
 - Paywall shown during onboarding (adding 2nd scheduled pill) and on dashboard (hitting limits)
-- RevenueCat manages cross-platform purchases, webhook syncs tier to Firestore
+- RevenueCat manages cross-platform purchases, webhook syncs tier to Supabase `profiles.subscription_tier` (via Edge Function in Phase 5)
 - Suggested pricing: $4.99/month or $39.99/year
 
 ---
@@ -292,7 +300,7 @@ Key UX principles for elderly users:
 - Init Expo project, configure TypeScript, path aliases, Expo Router
 - Theme system extracted from Stitch design tokens (colors, fonts, spacing from `stitch_halflifecontrol_html/`)
 - Generic UI components (Button, Card, Input, Typography) — styled to match Stitch HTML mockups
-- Firebase setup (project, config, auth)
+- Supabase setup (project, schema, RLS, auth)
 - Auth screens (login, register, forgot-password) — built to match `login_screen/` and `register_screen/` from Stitch
 - `useAuthStore` with Zustand
 - EAS Build profiles (dev, preview, production) — **Android builds only** initially
@@ -302,7 +310,7 @@ Key UX principles for elderly users:
 ### Phase 2: Core Pill Tracking
 - `src/core/halflife.ts` + unit tests
 - `src/core/scheduling.ts` + unit tests
-- `usePillStore` + Firestore CRUD
+- `usePillStore` + Supabase CRUD
 - Dashboard screen — match `dashboard_with_balanced_timer_thickness/` from Stitch (daily stack + one-time tracking sections)
 - `CountdownTimer`, `ProgressRing` (12px stroke SVG circles per Stitch design), `useCountdown` hook
 - Add medication flow — match `fixed_add_medication_flow/` + `add_medication_success_popup/` from Stitch
@@ -324,7 +332,7 @@ Key UX principles for elderly users:
 - Local notification scheduling
 - Notification action handlers ("Took it" / "Snooze")
 - Pill grouping for same-time notifications
-- Firebase Cloud Functions: backup push, auto-assume, dose cleanup
+- Server-side push notifications deferred to follow-up (local notifications cover core use case)
 - Test on physical devices (both platforms)
 
 ### Phase 5: Subscription
@@ -332,7 +340,7 @@ Key UX principles for elderly users:
 - `react-native-purchases` integration
 - Paywall screen — match `finalized_go_pro_screen/` from Stitch
 - Enforcement in onboarding + dashboard add-pill flow
-- Webhook Cloud Function for tier sync
+- Supabase Edge Function for RevenueCat webhook tier sync
 - Sandbox purchase testing on Android
 
 ### Phase 6: Polish + Android Launch
@@ -360,7 +368,7 @@ Key UX principles for elderly users:
 
 ## Watch App Preparedness
 
-`src/core/` is pure TypeScript with zero React or Firebase imports — only `date-fns`. This module can be:
+`src/core/` is pure TypeScript with zero React or Supabase imports — only `date-fns`. This module can be:
 - Directly imported for a **WearOS** React Native companion
 - Transpiled/ported for a **watchOS** SwiftUI companion
 
