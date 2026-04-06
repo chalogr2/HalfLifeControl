@@ -8,7 +8,7 @@ import {
   recordDose as fbRecordDose,
   updateDoseStatus as fbUpdateDoseStatus,
   initializeDashboardIfNeeded,
-} from '@/services/firebase/pills';
+} from '@/services/supabase/pills';
 import { cancelPillReminders } from '@/services/notifications';
 
 interface PillState {
@@ -16,7 +16,7 @@ interface PillState {
   activeDoses: Dose[];
   isLoading: boolean;
 
-  /** Load from cache instantly, then sync from Firestore. */
+  /** Load from cache instantly, then sync from Supabase. */
   init: (userId: string) => Promise<void>;
 
   /** Reset state on sign-out. */
@@ -30,7 +30,7 @@ interface PillState {
   /**
    * Synchronous in-memory update of a pill's preferred timer. Used to give the
    * dashboard instant feedback while the user is still on the detail screen;
-   * the actual Firestore/cache write happens separately (on detail-screen unmount).
+   * the actual Supabase/cache write happens separately (on detail-screen unmount).
    */
   setPillPreferredTimerLocal: (pillId: string, timerType: TimerType) => void;
 

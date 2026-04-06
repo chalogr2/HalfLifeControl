@@ -9,7 +9,7 @@ import {
   onSubscriptionChange,
   resetSubscriptions,
 } from '@/services/subscription';
-import { updateSubscriptionTier } from '@/services/firebase/auth';
+import { updateSubscriptionTier } from '@/services/supabase/auth';
 import { captureException } from '@/services/sentry';
 import type { PurchasesPackage } from 'react-native-purchases';
 
@@ -40,10 +40,10 @@ let cleanupListener: (() => void) | null = null;
 let currentUserId: string | null = null;
 
 /**
- * Sync tier change to Firestore so security rules can gate on subscriptionTier.
+ * Sync tier change to Supabase so the profile row stays current.
  * Fire-and-forget — don't block the UI on this write.
  */
-function syncTierToFirestore(uid: string, tier: SubscriptionTier): void {
+function syncTierToBackend(uid: string, tier: SubscriptionTier): void {
   updateSubscriptionTier(uid, tier).catch(captureException);
 }
 
@@ -70,12 +70,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       set({ tier, packages, isLoading: false });
 
       // Sync initial tier to Firestore
-      syncTierToFirestore(userId, tier);
+      syncTierToBackend(userId, tier);
 
       // Listen for future changes (single listener, cleaned up on reset)
       cleanupListener = onSubscriptionChange((newTier) => {
         set({ tier: newTier });
-        if (currentUserId) syncTierToFirestore(currentUserId, newTier);
+        if (currentUserId) syncTierToBackend(currentUserId, newTier);
       });
     } catch {
       set({ tier: 'free', packages: [], isLoading: false });
@@ -95,7 +95,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   purchase: async (pkg: PurchasesPackage) => {
     const tier = await purchasePackage(pkg);
     set({ tier });
-    if (currentUserId) syncTierToFirestore(currentUserId, tier);
+    if (currentUserId) syncTierToBackend(currentUserId, tier);
   },
 
   restore: async () => {
@@ -103,7 +103,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       const tier = await restorePurchases();
       set({ tier, isLoading: false });
-      if (currentUserId) syncTierToFirestore(currentUserId, tier);
+      if (currentUserId) syncTierToBackend(currentUserId, tier);
     } catch {
       set({ isLoading: false });
     }

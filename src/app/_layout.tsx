@@ -8,7 +8,7 @@ import { StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import { usePillStore } from '@/stores/usePillStore';
-import { onAuthChanged, getUserProfile } from '@/services/firebase/auth';
+import { onAuthChanged, getUserProfile, getSession } from '@/services/supabase/auth';
 import { clearUserCache } from '@/services/cache';
 import {
   initSentry,
@@ -23,7 +23,7 @@ initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
-function useFirebaseAuthListener() {
+function useSupabaseAuthListener() {
   const { setUser, setLoading } = useAuthStore();
   const initSubscriptions = useSubscriptionStore((s) => s.init);
   const resetSubscriptions = useSubscriptionStore((s) => s.reset);
@@ -31,15 +31,33 @@ function useFirebaseAuthListener() {
   const resetPills = usePillStore((s) => s.reset);
 
   useEffect(() => {
-    const unsubscribe = onAuthChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const profile = await getUserProfile(firebaseUser.uid);
+    // Hydrate from persisted session on cold start
+    (async () => {
+      try {
+        const session = await getSession();
+        if (session) {
+          const profile = await getUserProfile(session.userId);
           setUser(profile);
-          setSentryUser(firebaseUser.uid, profile.email);
-          // Initialize stores — cache-first, then sync
-          initSubscriptions(firebaseUser.uid);
-          initPills(firebaseUser.uid);
+          setSentryUser(session.userId, profile.email);
+          initSubscriptions(session.userId);
+          initPills(session.userId);
+        } else {
+          setUser(null);
+        }
+      } catch {
+        setUser(null);
+      }
+    })();
+
+    // Listen for future auth state changes (sign-in, sign-out, token refresh)
+    const unsubscribe = onAuthChanged(async (userId) => {
+      if (userId) {
+        try {
+          const profile = await getUserProfile(userId);
+          setUser(profile);
+          setSentryUser(userId, profile.email);
+          initSubscriptions(userId);
+          initPills(userId);
         } catch {
           setUser(null);
           clearSentryUser();
@@ -56,7 +74,7 @@ function useFirebaseAuthListener() {
 }
 
 function AuthGate() {
-  useFirebaseAuthListener();
+  useSupabaseAuthListener();
 
   const segments = useSegments();
   const router = useRouter();

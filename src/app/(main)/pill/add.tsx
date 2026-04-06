@@ -8,7 +8,7 @@ import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { useSubscriptionStore, FREE_SCHEDULED_LIMIT, FREE_RANDOM_LIMIT } from '@/stores/useSubscriptionStore';
-import { completeOnboarding } from '@/services/firebase/auth';
+import { completeOnboarding } from '@/services/supabase/auth';
 import { PILL_COLORS } from '@/core/pillColors';
 import type { PillType, ScheduleFrequency } from '@/core/types';
 

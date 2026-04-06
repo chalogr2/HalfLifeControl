@@ -1,5 +1,5 @@
 /**
- * Scheduling helpers — pure functions, no React/Firebase.
+ * Scheduling helpers — pure functions, no React or backend dependencies.
  */
 import type { PillSchedule, ScheduleFrequency } from './types';
 

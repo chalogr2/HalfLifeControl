@@ -52,11 +52,10 @@ export default function DashboardScreen() {
   }, [pills, activeDoses]);
 
   const sections = useMemo<Section[]>(() => {
-    const s: Section[] = [];
-    if (scheduledPills.length > 0) s.push({ title: 'My Daily Stack', data: scheduledPills });
-    // Always show the random section so users can add one-time pills
-    s.push({ title: 'One-Time Tracking', data: randomPills });
-    return s;
+    return [
+      { title: 'My Daily Stack', data: scheduledPills },
+      { title: 'One-Time Tracking', data: randomPills },
+    ];
   }, [scheduledPills, randomPills]);
 
   const getActiveDose = useCallback(
@@ -128,55 +127,44 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
-      {pills.length === 0 && !isLoading ? (
-        <View style={styles.empty}>
-          <Typography variant="headlineSm" align="center" color="onSurfaceVariant">
-            No medications yet
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderPill}
+        renderSectionHeader={({ section }) => (
+          <Typography variant="titleMd" color="onSurfaceVariant" style={styles.sectionHeader}>
+            {section.title}
           </Typography>
-          <Typography variant="bodyLg" align="center" color="outline" style={styles.emptySubtext}>
-            Tap the + button to add your first medication.
-          </Typography>
-        </View>
-      ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          renderItem={renderPill}
-          renderSectionHeader={({ section }) => (
-            <Typography variant="titleMd" color="onSurfaceVariant" style={styles.sectionHeader}>
-              {section.title}
-            </Typography>
-          )}
-          renderSectionFooter={({ section }) =>
-            section.title === 'My Daily Stack' ? (
-              <Pressable
-                style={styles.addToStack}
-                onPress={() => router.push('/(main)/pill/add?type=scheduled')}
-                accessibilityRole="button"
-                accessibilityLabel="Add pill to stack"
-              >
-                <Typography variant="labelLg" color="primary">
-                  + Add pill to stack
-                </Typography>
-              </Pressable>
-            ) : section.title === 'One-Time Tracking' ? (
-              <Pressable
-                style={styles.addToStack}
-                onPress={() => router.push('/(main)/pill/add?type=random')}
-                accessibilityRole="button"
-                accessibilityLabel="Track another pill"
-              >
-                <Typography variant="labelLg" color="primary">
-                  + Track another pill
-                </Typography>
-              </Pressable>
-            ) : null
-          }
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
-        />
-      )}
+        )}
+        renderSectionFooter={({ section }) =>
+          section.title === 'My Daily Stack' ? (
+            <Pressable
+              style={styles.addToStack}
+              onPress={() => router.push('/(main)/pill/add?type=scheduled')}
+              accessibilityRole="button"
+              accessibilityLabel="Add pill to stack"
+            >
+              <Typography variant="labelLg" color="primary">
+                + Add pill to stack
+              </Typography>
+            </Pressable>
+          ) : section.title === 'One-Time Tracking' ? (
+            <Pressable
+              style={styles.addToStack}
+              onPress={() => router.push('/(main)/pill/add?type=random')}
+              accessibilityRole="button"
+              accessibilityLabel="Track another pill"
+            >
+              <Typography variant="labelLg" color="primary">
+                + Track another pill
+              </Typography>
+            </Pressable>
+          ) : null
+        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+      />
     </SafeAreaView>
   );
 }
@@ -221,15 +209,5 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: colors.outlineVariant,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing[6],
-    gap: spacing[3],
-  },
-  emptySubtext: {
-    maxWidth: 260,
   },
 });

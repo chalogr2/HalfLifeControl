@@ -1,4 +1,4 @@
-export { auth, db } from './config';
+export { supabase } from './config';
 export {
   signUp,
   signIn,
@@ -6,6 +6,7 @@ export {
   resetPassword,
   getUserProfile,
   onAuthChanged,
+  getSession,
   completeOnboarding,
   updateUserSettings,
   updateSubscriptionTier,
@@ -21,4 +22,3 @@ export {
   fetchDosesByDateRange,
   initializeDashboardIfNeeded,
 } from './pills';
-export { signInWithGoogle, isGoogleCancellation } from './googleAuth';

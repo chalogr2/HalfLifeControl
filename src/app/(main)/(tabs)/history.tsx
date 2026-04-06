@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { fetchDoseHistory } from '@/services/firebase/pills';
+import { fetchDoseHistory } from '@/services/supabase/pills';
 import { captureException } from '@/services/sentry';
 import type { Dose } from '@/core/types';
 

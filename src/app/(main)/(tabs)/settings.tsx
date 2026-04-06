@@ -6,7 +6,7 @@ import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
-import { signOut, updateUserSettings } from '@/services/firebase/auth';
+import { signOut, updateUserSettings } from '@/services/supabase/auth';
 import type { ReminderMode } from '@/core/types';
 
 const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: string }[] = [

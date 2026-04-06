@@ -19,7 +19,7 @@ export interface Pill {
   drugName: string;
   drugId: string;
   halfLifeMinutes: number;
-  halfLifeSource: 'openfda' | 'curated' | 'manual';
+  halfLifeSource: 'openfda' | 'curated' | 'manual' | 'pubchem';
   dosageMg: number;
   dosageUnit: string;
   pillType: PillType;
@@ -61,13 +61,11 @@ export interface UserProfile {
   settings: UserSettings;
 }
 
-// ─── Firestore Document Schemas (Optimized) ─────────
+// ─── In-Memory / Cache Schemas ───────────────────────
 
 /**
- * Single-document vault for the user's active state.
- * Path: users/{uid}/data/dashboard
- *
- * 1 read per app open instead of N pills + N doses.
+ * Aggregated dashboard state held in memory and cache.
+ * Populated from Supabase pills + active doses queries on sync.
  */
 export interface DashboardDocument {
   pills: Pill[];
@@ -78,21 +76,11 @@ export interface DashboardDocument {
   updatedAt: Date;
 }
 
-/**
- * Monthly bucketed dose history.
- * Path: users/{uid}/history/{YYYY-MM}
- *
- * 1 read per month of history instead of N individual dose docs.
- */
-export interface MonthlyHistoryDocument {
-  month: string; // "YYYY-MM"
-  doses: Dose[];
-  updatedAt: Date;
-}
-
-/** Generate a unique ID for pills/doses (replaces Firestore auto-IDs). */
+/** Generate a v4 UUID for pills/doses. Compatible with Postgres uuid columns. */
 export function generateId(): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 10);
-  return `${timestamp}_${random}`;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }

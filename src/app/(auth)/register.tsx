@@ -12,8 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
-import { signUp } from '@/services/firebase/auth';
-import { signInWithGoogle, isGoogleCancellation } from '@/services/firebase/googleAuth';
+import { signUp } from '@/services/supabase/auth';
+import { signInWithGoogle, isGoogleCancellation } from '@/services/supabase/googleAuth';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 export default function RegisterScreen() {

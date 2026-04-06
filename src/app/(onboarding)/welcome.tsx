@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Typography, Button } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { completeOnboarding } from '@/services/firebase/auth';
+import { completeOnboarding } from '@/services/supabase/auth';
 
 export default function WelcomeScreen() {
   const router = useRouter();

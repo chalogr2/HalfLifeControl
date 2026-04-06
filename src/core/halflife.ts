@@ -1,5 +1,5 @@
 /**
- * Pure half-life math — no React, no Firebase.
+ * Pure half-life math — no React, no backend dependencies.
  * Can be extracted for Watch apps.
  */
 

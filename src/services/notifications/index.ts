@@ -1,7 +1,7 @@
 /**
  * Local notification service using expo-notifications.
  * Schedules pill reminders based on PillSchedule.
- * Push notifications (FCM) will be added in Phase 6 with @react-native-firebase.
+ * Server-side push notifications will be added in a follow-up phase.
  */
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';

@@ -6,7 +6,7 @@ import { Typography, Card } from '@/components/ui';
 import { ProgressRing } from '@/components/pills';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { fetchDosesByDateRange } from '@/services/firebase/pills';
+import { fetchDosesByDateRange } from '@/services/supabase/pills';
 import { usePillStore } from '@/stores/usePillStore';
 import type { Dose } from '@/core/types';
 

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
 import { colors, spacing } from '@/theme';
-import { resetPassword } from '@/services/firebase/auth';
+import { resetPassword } from '@/services/supabase/auth';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();

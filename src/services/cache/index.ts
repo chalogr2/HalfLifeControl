@@ -2,10 +2,10 @@
  * Local cache + write-ahead log using AsyncStorage + AES-256-GCM encryption.
  *
  * Cache-first strategy: the app reads from cache instantly on launch,
- * then syncs from Firestore in the background. Writes update the cache
- * immediately before pushing to Firestore.
+ * then syncs from Supabase in the background. Writes update the cache
+ * immediately before pushing to Supabase.
  *
- * Write-ahead log (WAL): every Firestore write is persisted to AsyncStorage
+ * Write-ahead log (WAL): every Supabase write is persisted to AsyncStorage
  * BEFORE the network call. If the write succeeds, the entry is removed.
  * If the app is killed or loses connection, pending writes survive and are
  * retried on next app open. This gives us native-SDK-level reliability
@@ -165,9 +165,9 @@ export async function setLastSyncTime(uid: string): Promise<void> {
 
 // ─── Write-Ahead Log (WAL) ──────────────────────────
 //
-// Each entry represents a pending Firestore operation that must eventually
+// Each entry represents a pending Supabase operation that must eventually
 // succeed. The entry is persisted BEFORE the network call and removed
-// only after Firestore confirms the write.
+// only after Supabase confirms the write.
 //
 // Operations are atomic and commutative — order doesn't matter,
 // replaying the same operation twice is safe (idempotent or harmless).
