@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pill Detail - HalfLifeControl</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;600;700;800;900&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary": "#016a60",
+            "on-secondary-container": "#117166",
+            "primary-container": "#006684",
+            "inverse-on-surface": "#f1f0f4",
+            "secondary-fixed": "#9ff2e4",
+            "surface-dim": "#dadadd",
+            "surface-bright": "#faf9fc",
+            "on-primary-fixed": "#001f2a",
+            "secondary-container": "#9ff2e4",
+            "primary": "#004d64",
+            "outline-variant": "#bfc8cd",
+            "on-secondary-fixed-variant": "#005048",
+            "on-error-container": "#93000a",
+            "surface-container-lowest": "#ffffff",
+            "inverse-surface": "#2f3033",
+            "surface-container-highest": "#e2e2e5",
+            "error": "#ba1a1a",
+            "surface-container-high": "#e8e8eb",
+            "on-surface-variant": "#3f484d",
+            "on-primary-container": "#a2e1ff",
+            "on-error": "#ffffff",
+            "tertiary-fixed": "#ffdcc3",
+            "surface-variant": "#e2e2e5",
+            "on-primary": "#ffffff",
+            "surface": "#faf9fc",
+            "tertiary-container": "#904c00",
+            "on-tertiary-fixed": "#2f1500",
+            "tertiary-fixed-dim": "#ffb77d",
+            "secondary-fixed-dim": "#84d5c8",
+            "on-tertiary": "#ffffff",
+            "surface-container": "#eeedf1",
+            "surface-container-low": "#f4f3f6",
+            "on-surface": "#1a1c1e",
+            "primary-fixed-dim": "#87d0f2",
+            "surface-tint": "#016684",
+            "on-background": "#1a1c1e",
+            "primary-fixed": "#bee9ff",
+            "inverse-primary": "#87d0f2",
+            "background": "#faf9fc",
+            "on-secondary-fixed": "#00201c",
+            "on-tertiary-fixed-variant": "#6e3900",
+            "on-tertiary-container": "#ffcea9",
+            "on-primary-fixed-variant": "#004d64",
+            "error-container": "#ffdad6",
+            "outline": "#70787e",
+            "on-secondary": "#ffffff",
+            "tertiary": "#6d3800"
+          },
+          fontFamily: {
+            "headline": ["Lexend"],
+            "body": ["Plus Jakarta Sans"],
+            "label": ["Plus Jakarta Sans"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "1.5rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .progress-ring-circle {
+      transition: stroke-dashoffset 0.35s;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased min-h-screen pb-32">
+<!-- TopAppBar: Predicted Component Mapping -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center justify-center w-10 h-10 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95 duration-200 rounded-full cursor-pointer">
+<span class="material-symbols-outlined text-cyan-900 dark:text-cyan-100" data-icon="close">close</span>
+</div>
+<div class="text-cyan-950 dark:text-white font-black font-headline text-lg">
+      HalfLifeControl
+    </div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container active:scale-95 duration-200 transition-transform">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="Close-up portrait of a friendly middle-aged man with a kind smile, professional studio lighting, neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_Im2mM3g1Ofk1Q_qTIu8jbpaF56rDwN8DYg0NZXI-wl2CUHHGRUfbBlRyyDwZquUy2XHM9xDfa7AeAzm3LsKkEchKOlR9MSR7VDmGnKRLMmEZ53BJ7srygaA1UsRNoGcLaVtfzMxNlAhJVp1TbGrLuDeLWrgDR38f2gU5OdjPY1hwckEkMqDIJEpPng59kkjfs0nSdZ-qqnMyP-N5J3Md2XytgaLXBx9fiBMap8Ex2RPlGuLcMRkCnPhHEUPZkWWcZR5pnrsVN8wB"/>
+</div>
+</header>
+<main class="mt-20 px-6 max-w-2xl mx-auto">
+<!-- Header Title Section -->
+<section class="py-6 text-center">
+<h1 class="font-headline font-bold text-4xl text-primary leading-tight">Aspirin 81mg</h1>
+<p class="text-on-surface-variant font-medium mt-2">Daily Heart Health Support</p>
+</section>
+<!-- Timer Selection Grid -->
+<section class="mt-8">
+<div class="bg-surface-container-low rounded-xl p-6">
+<h2 class="font-headline font-bold text-xl mb-2 text-on-surface">Timer Display Selection</h2>
+<p class="text-on-surface-variant text-sm mb-8">Tap a timer to set as your dashboard default</p>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Timer 1 -->
+<button class="flex flex-col items-center p-4 rounded-xl transition-all hover:bg-surface-container-high active:scale-95">
+<div class="relative w-28 h-28 flex items-center justify-center mb-3">
+<svg class="w-full h-full">
+<circle class="text-surface-variant stroke-current" cx="56" cy="56" fill="transparent" r="48" stroke-width="8"></circle>
+<circle class="text-primary-container stroke-current progress-ring-circle" cx="56" cy="56" fill="transparent" r="48" stroke-linecap="round" stroke-width="8" style="stroke-dasharray: 301.59; stroke-dashoffset: 75.39;"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline font-bold text-xl text-primary">8h</span>
+<span class="text-[10px] font-bold uppercase tracking-wider text-primary">Left</span>
+</div>
+</div>
+<span class="text-sm font-semibold text-on-surface">Duration of Action</span>
+</button>
+<!-- Timer 2 (Selected) -->
+<button class="flex flex-col items-center p-4 rounded-xl bg-surface-container-lowest border-2 border-primary shadow-lg relative active:scale-95">
+<div class="absolute -top-3 -right-2 bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="relative w-28 h-28 flex items-center justify-center mb-3">
+<svg class="w-full h-full">
+<circle class="text-surface-variant stroke-current" cx="56" cy="56" fill="transparent" r="48" stroke-width="10"></circle>
+<circle class="text-secondary stroke-current progress-ring-circle" cx="56" cy="56" fill="transparent" r="48" stroke-linecap="round" stroke-width="10" style="stroke-dasharray: 301.59; stroke-dashoffset: 120.63;"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline font-bold text-lg text-secondary">4h 23m</span>
+<span class="text-[10px] font-bold uppercase tracking-wider text-secondary">Left</span>
+</div>
+</div>
+<span class="text-sm font-bold text-primary">Half-Life</span>
+</button>
+<!-- Timer 3 -->
+<button class="flex flex-col items-center p-4 rounded-xl transition-all hover:bg-surface-container-high active:scale-95">
+<div class="relative w-28 h-28 flex items-center justify-center mb-3">
+<svg class="w-full h-full">
+<circle class="text-surface-variant stroke-current" cx="56" cy="56" fill="transparent" r="48" stroke-width="8"></circle>
+<circle class="text-primary-container stroke-current progress-ring-circle" cx="56" cy="56" fill="transparent" r="48" stroke-linecap="round" stroke-width="8" style="stroke-dasharray: 301.59; stroke-dashoffset: 10.5;"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline font-bold text-xl text-primary">36h</span>
+<span class="text-[10px] font-bold uppercase tracking-wider text-primary">Total</span>
+</div>
+</div>
+<span class="text-sm font-semibold text-on-surface">Clearance Time</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Dosage Section -->
+<section class="mt-10">
+<div class="bg-surface-container-lowest rounded-xl p-8 border-l-[6px] border-primary shadow-sm">
+<h2 class="font-headline font-bold text-xl text-on-surface mb-6">Edit Dosage</h2>
+<div class="flex items-center justify-between bg-surface-container-high p-4 rounded-xl">
+<div class="flex flex-1 items-center justify-center gap-4">
+<input aria-label="Dosage amount" class="w-32 h-20 text-center font-headline font-extrabold text-5xl text-primary bg-white border-2 border-primary rounded-xl focus:ring-4 focus:ring-primary/20 focus:outline-none shadow-sm" type="number" value="81"/>
+<span class="font-headline font-bold text-2xl text-on-surface-variant">mg</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Actions Section -->
+<section class="mt-12 mb-16 text-center">
+<button class="w-full h-16 rounded-xl border-2 border-error text-error font-headline font-bold text-lg flex items-center justify-center gap-2 hover:bg-error-container/20 transition-colors active:scale-[0.98]">
+<span class="material-symbols-outlined">delete</span>
+        Delete Pill
+      </button>
+</section>
+</main>
+<!-- BottomNavBar: Predicted Component Mapping -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex justify-around items-center px-4 pb-6 pt-3">
+<!-- Dashboard (Active) -->
+<a class="flex flex-col items-center justify-center bg-cyan-100 dark:bg-cyan-900/40 text-cyan-900 dark:text-cyan-100 rounded-2xl px-5 py-2 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-plus-jakarta text-xs font-medium mt-1">Dashboard</span>
+</a>
+<!-- History -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-5 py-2 hover:text-cyan-600 dark:hover:text-cyan-300 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-plus-jakarta text-xs font-medium mt-1">History</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-5 py-2 hover:text-cyan-600 dark:hover:text-cyan-300 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-plus-jakarta text-xs font-medium mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

@@ -9,6 +9,7 @@ import type { TimerType } from '@/core/types';
 interface CountdownTimerProps {
   takenAt: Date;
   halfLifeMinutes: number;
+  durationOfActionMinutes?: number | null;
   color?: string;
   timerType?: TimerType;
 }
@@ -16,8 +17,8 @@ interface CountdownTimerProps {
 /**
  * Shows a ring + concentration % + time remaining for an active dose.
  */
-export function CountdownTimer({ takenAt, halfLifeMinutes, color, timerType = 'clearance' }: CountdownTimerProps) {
-  const { progress, timeLabel, concentration, isEliminated } = useCountdown(takenAt, halfLifeMinutes, timerType);
+export function CountdownTimer({ takenAt, halfLifeMinutes, durationOfActionMinutes, color, timerType = 'clearance' }: CountdownTimerProps) {
+  const { progress, timeLabel, concentration, isEliminated } = useCountdown(takenAt, halfLifeMinutes, timerType, durationOfActionMinutes);
 
   if (isEliminated) {
     return (

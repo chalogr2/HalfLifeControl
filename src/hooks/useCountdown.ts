@@ -29,18 +29,21 @@ interface CountdownState {
  * Catches up instantly on foreground resume.
  *
  * @param timerType - Which timer to display. Defaults to 'clearance' (5×HL, original behavior).
+ * @param durationOfActionMinutes - Optional curated duration of action snapshotted on the
+ *   Pill/Dose. When provided and timerType === 'action', overrides the 2× HL fallback.
  */
 export function useCountdown(
   takenAt: Date,
   halfLifeMinutes: number,
   timerType: TimerType = 'clearance',
+  durationOfActionMinutes?: number | null,
 ): CountdownState {
   const compute = (): CountdownState => {
     const now = new Date();
     const elapsed = (now.getTime() - takenAt.getTime()) / 60_000;
     const conc = calcConcentration(elapsed, halfLifeMinutes);
-    const remaining = timerMinutesRemaining(takenAt, halfLifeMinutes, timerType, now);
-    const progress = timerProgress(takenAt, halfLifeMinutes, timerType, now);
+    const remaining = timerMinutesRemaining(takenAt, halfLifeMinutes, timerType, now, durationOfActionMinutes);
+    const progress = timerProgress(takenAt, halfLifeMinutes, timerType, now, durationOfActionMinutes);
     // Eliminated is always based on full clearance (5×HL)
     const elimRemaining = calcMinutesRemaining(takenAt, halfLifeMinutes, now);
     return {
@@ -71,7 +74,7 @@ export function useCountdown(
       if (intervalRef.current) clearInterval(intervalRef.current);
       sub.remove();
     };
-  }, [takenAt.getTime(), halfLifeMinutes, timerType]);
+  }, [takenAt.getTime(), halfLifeMinutes, timerType, durationOfActionMinutes]);
 
   return state;
 }

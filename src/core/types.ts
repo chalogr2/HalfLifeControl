@@ -6,6 +6,13 @@ export type DoseStatus = 'active' | 'dismissed' | 'completed';
 export type DoseSource = 'manual' | 'notification' | 'auto' | 'retroactive';
 export type TimerType = 'action' | 'halfLife' | 'clearance';
 export type SubscriptionTier = 'free' | 'pro';
+/**
+ * Classifies what the "third timer" represents for a given drug:
+ * - 'action'   → true pharmacodynamic duration of action (e.g. ibuprofen 6h analgesia)
+ * - 'interval' → labelled/maintenance dosing interval (e.g. clonazepam BID = 12h)
+ * - 'none'     → no citable duration (PRN / OTC / supplement); hide the third timer
+ */
+export type DurationType = 'action' | 'interval' | 'none';
 
 export interface PillSchedule {
   timeOfDay: string; // "HH:mm"
@@ -20,6 +27,21 @@ export interface Pill {
   drugId: string;
   halfLifeMinutes: number;
   halfLifeSource: 'openfda' | 'curated' | 'manual' | 'pubchem';
+  /**
+   * Snapshot of curated duration of action at pill creation time.
+   * null = no curated value; UI falls back to 2 × halfLifeMinutes multiplier.
+   * Snapshotted (not looked up live) so future DB updates don't retroactively change existing pills.
+   */
+  durationOfActionMinutes: number | null;
+  /**
+   * Snapshot of how to label & whether to show the third timer.
+   * Defaults to 'action' for legacy rows without the field.
+   */
+  durationType: DurationType;
+  /** If true, the interval is a maintenance-dose interval (e.g. methotrexate weekly). */
+  isMaintenanceInterval?: boolean;
+  /** If true, show a prominent warning that this drug is dosed weekly (methotrexate safety). */
+  requiresWeeklyWarning?: boolean;
   dosageMg: number;
   dosageUnit: string;
   pillType: PillType;
@@ -38,6 +60,12 @@ export interface Dose {
   takenAt: Date;
   scheduledFor: Date | null;
   halfLifeMinutes: number;
+  /** Snapshot of duration of action at dose creation time. null → fall back to 2× halfLifeMinutes. */
+  durationOfActionMinutes: number | null;
+  /** Snapshot of the duration-type label at dose creation time. */
+  durationType: DurationType;
+  isMaintenanceInterval?: boolean;
+  requiresWeeklyWarning?: boolean;
   eliminationAt: Date;
   status: DoseStatus;
   source: DoseSource;

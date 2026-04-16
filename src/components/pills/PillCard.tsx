@@ -51,8 +51,15 @@ export function PillCard({ pill, activeDose, nextDoseLabel, onPress, onTakeDose 
             <CountdownTimer
               takenAt={activeDose.takenAt}
               halfLifeMinutes={activeDose.halfLifeMinutes}
+              durationOfActionMinutes={activeDose.durationOfActionMinutes}
               color={pill.color}
-              timerType={pill.preferredTimer}
+              timerType={
+                // Category C drugs never have a real 'action' timer — fall back
+                // to clearance so the dashboard never tries to render a hidden timer.
+                pill.preferredTimer === 'action' && pill.durationType === 'none'
+                  ? 'clearance'
+                  : pill.preferredTimer
+              }
             />
           ) : (
             <Pressable

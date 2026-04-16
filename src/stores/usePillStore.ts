@@ -37,7 +37,16 @@ interface PillState {
   // Doses
   recordDose: (
     userId: string,
-    pill: Pick<Pill, 'id' | 'drugName' | 'halfLifeMinutes'>,
+    pill: Pick<
+      Pill,
+      | 'id'
+      | 'drugName'
+      | 'halfLifeMinutes'
+      | 'durationOfActionMinutes'
+      | 'durationType'
+      | 'isMaintenanceInterval'
+      | 'requiresWeeklyWarning'
+    >,
     takenAt: Date,
     source: DoseSource,
   ) => Promise<string>;

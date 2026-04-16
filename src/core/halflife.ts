@@ -5,15 +5,37 @@
 
 import type { TimerType } from './types';
 
-/** Multiplier for each timer type (applied to halfLifeMinutes). */
+/**
+ * Multiplier for each timer type (applied to halfLifeMinutes).
+ *
+ * NOTE: `action` is a fallback only — the 2× multiplier is pharmacologically wrong
+ * for many drugs (e.g. clonazepam half-life ~34h would yield 68h "duration of action"
+ * when the real value is ~10h). When a per-drug `durationOfActionMinutes` is supplied
+ * (snapshotted from the curated database — see docs/SOURCES.md), it overrides this
+ * multiplier. The fallback only kicks in for drugs with no curated value yet.
+ */
 export const TIMER_MULTIPLIER: Record<TimerType, number> = {
-  action: 2,    // Therapeutic window (~25% remaining)
+  action: 2,    // Fallback only — see note above
   halfLife: 1,  // 50% remaining
   clearance: 5, // ~97% eliminated
 };
 
-/** Total duration in minutes for a given timer type. */
-export function timerDurationMinutes(halfLifeMinutes: number, timerType: TimerType): number {
+/**
+ * Total duration in minutes for a given timer type.
+ *
+ * @param halfLifeMinutes - The drug's half-life
+ * @param timerType - Which timer (action / halfLife / clearance)
+ * @param durationOfActionMinutes - Optional curated duration of action (snapshotted on the Pill/Dose).
+ *   Only used when timerType === 'action'. When null/undefined, falls back to 2 × halfLifeMinutes.
+ */
+export function timerDurationMinutes(
+  halfLifeMinutes: number,
+  timerType: TimerType,
+  durationOfActionMinutes?: number | null,
+): number {
+  if (timerType === 'action' && durationOfActionMinutes != null && durationOfActionMinutes > 0) {
+    return durationOfActionMinutes;
+  }
   return halfLifeMinutes * TIMER_MULTIPLIER[timerType];
 }
 
@@ -54,8 +76,9 @@ export function timerMinutesRemaining(
   halfLifeMinutes: number,
   timerType: TimerType,
   now: Date = new Date(),
+  durationOfActionMinutes?: number | null,
 ): number {
-  const totalMs = timerDurationMinutes(halfLifeMinutes, timerType) * 60_000;
+  const totalMs = timerDurationMinutes(halfLifeMinutes, timerType, durationOfActionMinutes) * 60_000;
   const endAt = takenAt.getTime() + totalMs;
   return Math.max(0, (endAt - now.getTime()) / 60_000);
 }
@@ -66,8 +89,9 @@ export function timerProgress(
   halfLifeMinutes: number,
   timerType: TimerType,
   now: Date = new Date(),
+  durationOfActionMinutes?: number | null,
 ): number {
-  const totalMs = timerDurationMinutes(halfLifeMinutes, timerType) * 60_000;
+  const totalMs = timerDurationMinutes(halfLifeMinutes, timerType, durationOfActionMinutes) * 60_000;
   if (totalMs <= 0) return 1;
   const elapsed = now.getTime() - takenAt.getTime();
   return Math.min(1, Math.max(0, elapsed / totalMs));

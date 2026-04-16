@@ -89,6 +89,14 @@ function deserializePill(raw: Record<string, any>): Pill {
     drugId: raw.drugId ?? raw.drug_id ?? '',
     halfLifeMinutes: raw.halfLifeMinutes ?? raw.half_life_minutes,
     halfLifeSource: raw.halfLifeSource ?? raw.half_life_source ?? 'manual',
+    durationOfActionMinutes:
+      raw.durationOfActionMinutes ?? raw.duration_of_action_minutes ?? null,
+    durationType:
+      (raw.durationType ?? raw.duration_type ?? 'action') as Pill['durationType'],
+    isMaintenanceInterval:
+      raw.isMaintenanceInterval ?? raw.is_maintenance_interval ?? false,
+    requiresWeeklyWarning:
+      raw.requiresWeeklyWarning ?? raw.requires_weekly_warning ?? false,
     dosageMg: raw.dosageMg ?? raw.dosage_mg,
     dosageUnit: raw.dosageUnit ?? raw.dosage_unit ?? 'mg',
     pillType: raw.pillType ?? raw.pill_type,
@@ -119,6 +127,14 @@ function deserializeDose(raw: Record<string, any>): Dose {
     takenAt: toDate(raw.takenAt ?? raw.taken_at),
     scheduledFor: (raw.scheduledFor ?? raw.scheduled_for) ? toDate(raw.scheduledFor ?? raw.scheduled_for) : null,
     halfLifeMinutes: raw.halfLifeMinutes ?? raw.half_life_minutes,
+    durationOfActionMinutes:
+      raw.durationOfActionMinutes ?? raw.duration_of_action_minutes ?? null,
+    durationType:
+      (raw.durationType ?? raw.duration_type ?? 'action') as Dose['durationType'],
+    isMaintenanceInterval:
+      raw.isMaintenanceInterval ?? raw.is_maintenance_interval ?? false,
+    requiresWeeklyWarning:
+      raw.requiresWeeklyWarning ?? raw.requires_weekly_warning ?? false,
     eliminationAt: toDate(raw.eliminationAt ?? raw.elimination_at),
     status: raw.status,
     source: raw.source ?? 'manual',
@@ -135,6 +151,10 @@ function pillToRow(pill: Pill, userId: string): Record<string, any> {
     drug_id: pill.drugId || null,
     half_life_minutes: pill.halfLifeMinutes,
     half_life_source: pill.halfLifeSource,
+    duration_of_action_minutes: pill.durationOfActionMinutes,
+    duration_type: pill.durationType ?? 'action',
+    is_maintenance_interval: pill.isMaintenanceInterval ?? false,
+    requires_weekly_warning: pill.requiresWeeklyWarning ?? false,
     dosage_mg: pill.dosageMg,
     dosage_unit: pill.dosageUnit,
     pill_type: pill.pillType,
@@ -157,6 +177,10 @@ function doseToRow(dose: Dose, userId: string): Record<string, any> {
     taken_at: dose.takenAt.toISOString(),
     scheduled_for: dose.scheduledFor?.toISOString() ?? null,
     half_life_minutes: dose.halfLifeMinutes,
+    duration_of_action_minutes: dose.durationOfActionMinutes,
+    duration_type: dose.durationType ?? 'action',
+    is_maintenance_interval: dose.isMaintenanceInterval ?? false,
+    requires_weekly_warning: dose.requiresWeeklyWarning ?? false,
     elimination_at: dose.eliminationAt.toISOString(),
     status: dose.status,
     source: dose.source,
@@ -348,6 +372,10 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
       if ('drugId' in partialData) dbUpdate.drug_id = partialData.drugId;
       if ('halfLifeMinutes' in partialData) dbUpdate.half_life_minutes = partialData.halfLifeMinutes;
       if ('halfLifeSource' in partialData) dbUpdate.half_life_source = partialData.halfLifeSource;
+      if ('durationOfActionMinutes' in partialData) dbUpdate.duration_of_action_minutes = partialData.durationOfActionMinutes;
+      if ('durationType' in partialData) dbUpdate.duration_type = partialData.durationType;
+      if ('isMaintenanceInterval' in partialData) dbUpdate.is_maintenance_interval = partialData.isMaintenanceInterval;
+      if ('requiresWeeklyWarning' in partialData) dbUpdate.requires_weekly_warning = partialData.requiresWeeklyWarning;
       if ('pillType' in partialData) dbUpdate.pill_type = partialData.pillType;
       if ('schedule' in partialData) dbUpdate.schedule = partialData.schedule;
       if ('color' in partialData) dbUpdate.color = partialData.color;
@@ -523,7 +551,16 @@ export async function deletePill(uid: string, pillId: string): Promise<Dashboard
 
 export async function recordDose(
   uid: string,
-  pill: Pick<Pill, 'id' | 'drugName' | 'halfLifeMinutes'>,
+  pill: Pick<
+    Pill,
+    | 'id'
+    | 'drugName'
+    | 'halfLifeMinutes'
+    | 'durationOfActionMinutes'
+    | 'durationType'
+    | 'isMaintenanceInterval'
+    | 'requiresWeeklyWarning'
+  >,
   takenAt: Date,
   source: DoseSource,
   scheduledFor?: Date | null,
@@ -539,6 +576,10 @@ export async function recordDose(
     takenAt,
     scheduledFor: scheduledFor ?? null,
     halfLifeMinutes: pill.halfLifeMinutes,
+    durationOfActionMinutes: pill.durationOfActionMinutes,
+    durationType: pill.durationType ?? 'action',
+    isMaintenanceInterval: pill.isMaintenanceInterval ?? false,
+    requiresWeeklyWarning: pill.requiresWeeklyWarning ?? false,
     eliminationAt: elimAt,
     status: 'active',
     source,

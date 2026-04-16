@@ -18,31 +18,59 @@ import { usePillStore } from '@/stores/usePillStore';
 import { describeSchedule } from '@/core/scheduling';
 import { timerDurationMinutes, formatTimeRemaining, timerMinutesRemaining, timerProgress } from '@/core/halflife';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
-import type { TimerType, Dose } from '@/core/types';
+import type { TimerType, Dose, DurationType } from '@/core/types';
 
-const TIMER_CONFIGS: { type: TimerType; label: string; sublabel: string }[] = [
-  { type: 'action', label: 'Duration of Action', sublabel: 'LEFT' },
-  { type: 'halfLife', label: 'Half-Life', sublabel: 'LEFT' },
-  { type: 'clearance', label: 'Clearance Time', sublabel: 'LEFT' },
-];
+interface TimerConfig {
+  type: TimerType;
+  label: string;
+  sublabel: string;
+}
+
+/**
+ * Build the list of timer rings shown on the detail screen.
+ * - Category C (durationType === 'none') hides the first row entirely.
+ * - Category A labels the first row "Duration of Action".
+ * - Category B labels it "Dosing Interval" (or "Maintenance Interval" for methotrexate-style weekly drugs).
+ */
+function getTimerConfigs(
+  durationType: DurationType,
+  isMaintenanceInterval: boolean,
+): TimerConfig[] {
+  const configs: TimerConfig[] = [];
+  if (durationType === 'action') {
+    configs.push({ type: 'action', label: 'Duration of Action', sublabel: 'LEFT' });
+  } else if (durationType === 'interval') {
+    configs.push({
+      type: 'action',
+      label: isMaintenanceInterval ? 'Maintenance Interval' : 'Dosing Interval',
+      sublabel: 'LEFT',
+    });
+  }
+  configs.push({ type: 'halfLife', label: 'Half-Life', sublabel: 'LEFT' });
+  configs.push({ type: 'clearance', label: 'Clearance Time', sublabel: 'LEFT' });
+  return configs;
+}
 
 function DetailTimerRing({
   takenAt,
   halfLifeMinutes,
+  durationOfActionMinutes,
   timerType,
   isSelected,
   onPress,
   pillColor,
+  config,
 }: {
   takenAt: Date;
   halfLifeMinutes: number;
+  durationOfActionMinutes: number | null;
   timerType: TimerType;
   isSelected: boolean;
   onPress: () => void;
   pillColor: string;
+  config: TimerConfig;
 }) {
-  const { timeLabel, progress, minutesRemaining } = useCountdown(takenAt, halfLifeMinutes, timerType);
-  const config = TIMER_CONFIGS.find((c) => c.type === timerType)!;
+  const { timeLabel, progress, minutesRemaining } = useCountdown(takenAt, halfLifeMinutes, timerType, durationOfActionMinutes);
   const isDone = minutesRemaining <= 0;
 
   const size = 112;
@@ -120,17 +148,20 @@ function DetailTimerRing({
 
 function InactiveTimerRing({
   halfLifeMinutes,
+  durationOfActionMinutes,
   timerType,
   isSelected,
   onPress,
+  config,
 }: {
   halfLifeMinutes: number;
+  durationOfActionMinutes: number | null;
   timerType: TimerType;
   isSelected: boolean;
   onPress: () => void;
+  config: TimerConfig;
 }) {
-  const config = TIMER_CONFIGS.find((c) => c.type === timerType)!;
-  const totalMinutes = timerDurationMinutes(halfLifeMinutes, timerType);
+  const totalMinutes = timerDurationMinutes(halfLifeMinutes, timerType, durationOfActionMinutes);
   const totalLabel = formatTimeRemaining(totalMinutes);
 
   const size = 112;
@@ -260,6 +291,25 @@ export default function PillDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const timerConfigs = useMemo(
+    () =>
+      getTimerConfigs(
+        pill?.durationType ?? 'action',
+        pill?.isMaintenanceInterval ?? false,
+      ),
+    [pill?.durationType, pill?.isMaintenanceInterval],
+  );
+
+  // If the persisted preferredTimer points to a timer we no longer show
+  // (e.g. 'action' on a Category C pill), fall back to 'clearance'.
+  useEffect(() => {
+    const current = latestRef.current.selectedTimer;
+    if (!current) return;
+    if (!timerConfigs.some((c) => c.type === current)) {
+      setSelectedTimer('clearance');
+    }
+  }, [timerConfigs]);
+
   if (!pill) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -356,6 +406,22 @@ export default function PillDetailScreen() {
           )}
         </View>
 
+        {/* Safety banner: weekly-dosed drugs (e.g. methotrexate) */}
+        {pill.requiresWeeklyWarning && (
+          <View style={styles.weeklyWarning}>
+            <Ionicons name="warning" size={20} color={colors.error} />
+            <View style={{ flex: 1 }}>
+              <Typography variant="labelLg" color="error">
+                Dosed once per week
+              </Typography>
+              <Typography variant="bodySm" color="onSurface">
+                Taking this drug daily can be fatal. The timer shows your 7-day
+                interval between doses.
+              </Typography>
+            </View>
+          </View>
+        )}
+
         {/* Take dose button (only when no active dose) */}
         {!activeDose && (
           <Pressable
@@ -380,24 +446,28 @@ export default function PillDetailScreen() {
             Tap a timer to set as your dashboard default
           </Typography>
           <View style={styles.timerGrid}>
-            {TIMER_CONFIGS.map(({ type }) =>
+            {timerConfigs.map((config) =>
               activeDose ? (
                 <DetailTimerRing
-                  key={type}
+                  key={config.type}
                   takenAt={activeDose.takenAt}
                   halfLifeMinutes={activeDose.halfLifeMinutes}
-                  timerType={type}
-                  isSelected={selectedTimer === type}
-                  onPress={() => handleSelectTimer(type)}
+                  durationOfActionMinutes={activeDose.durationOfActionMinutes}
+                  timerType={config.type}
+                  isSelected={selectedTimer === config.type}
+                  onPress={() => handleSelectTimer(config.type)}
                   pillColor={pill.color}
+                  config={config}
                 />
               ) : (
                 <InactiveTimerRing
-                  key={type}
+                  key={config.type}
                   halfLifeMinutes={pill.halfLifeMinutes}
-                  timerType={type}
-                  isSelected={selectedTimer === type}
-                  onPress={() => handleSelectTimer(type)}
+                  durationOfActionMinutes={pill.durationOfActionMinutes}
+                  timerType={config.type}
+                  isSelected={selectedTimer === config.type}
+                  onPress={() => handleSelectTimer(config.type)}
+                  config={config}
                 />
               ),
             )}
@@ -621,5 +691,16 @@ const styles = StyleSheet.create({
   },
   deleteButtonPressed: {
     backgroundColor: colors.errorContainer + '33',
+  },
+  weeklyWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    padding: spacing[4],
+    marginBottom: spacing[5],
+    backgroundColor: colors.errorContainer,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.error,
   },
 });

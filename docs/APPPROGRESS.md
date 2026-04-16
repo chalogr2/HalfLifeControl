@@ -963,6 +963,46 @@ Ran `npx tsc --noEmit` — **0 errors**.
 
 ---
 
+## Duration-of-Action Timer Rework (2026-04-16)
+
+### Problem
+The third timer on the detail screen was computed as `2 × halfLife` for every drug. That multiplier is wrong for most drugs: BZDs (clonazepam) showed ~70 h when the clinical dosing interval is 12 h; ER opioids, PPIs, and methotrexate (weekly) were all misrepresented in ways that ranged from confusing to genuinely unsafe.
+
+### Evidence pipeline
+- `scripts/build-duration-db.mjs` pulls per-drug evidence from DailyMed (LOINC 34068-7 §2 Dosage, 43681-6 §12.2 Pharmacodynamics, 34090-1 §14 Clinical Studies) and PubChem PUGView into `docs/duration-research.md`.
+- All 147 curated drugs were classified into three buckets in `docs/DRUGS.md` with citable sources:
+  - **Category A — Duration of Action** (30 drugs): true pharmacodynamic duration exists (ibuprofen, insulin, triptans, IR opioids).
+  - **Category B — Dosing Interval / Maintenance** (110 drugs): no distinct PD duration; use the labelled dosing interval (BID/TID/QD/weekly).
+  - **Category C — Hide third timer** (7 drugs): no citable interval — PRN / OTC / supplements (sildenafil, caffeine, melatonin, vitamin D3, loperamide).
+- Safety-first rules applied to 12 edge cases: err toward **shorter** duration (don't imply drug protection has outlived clinical effect) and **conservative** intervals (don't invite premature redose). Opioid ER brands with diverging BID vs QD schedules were split into separate rows (Zohydro ER / Hysingla ER, MS Contin / Kadian) so an overdose can't be masked by a one-size-fits-all 12 h timer.
+
+### Schema + types
+- `src/core/types.ts` — added `DurationType = 'action' | 'interval' | 'none'` plus `durationType`, optional `isMaintenanceInterval`, and `requiresWeeklyWarning` fields on both `Pill` and `Dose` (snapshotted so future DB edits can't retroactively shift history).
+- `supabase/migrations/0002_duration_of_action.sql` — adds `duration_of_action_minutes` to `pills` + `doses`.
+- `supabase/migrations/0003_duration_type.sql` — adds `duration_type`, `is_maintenance_interval`, `requires_weekly_warning` to both tables with `notify pgrst, 'reload schema'`.
+- `src/data/drugDatabase.ts` — rewritten with extended `DrugEntry` interface covering all three classification fields across 149 entries (147 source + 2 opioid brand splits). `searchDrugs(query, limit)` typeahead helper retained.
+
+### Wiring
+- `src/services/supabase/pills.ts` — mapped new columns in `deserializePill`/`deserializeDose`/`pillToRow`/`doseToRow` and the `updatePill` WAL executor. Extended `recordDose`'s `Pick<Pill,...>` signature.
+- `src/stores/usePillStore.ts` — extended `recordDose` Pick signature so callers must pass the full snapshot.
+- `src/app/(main)/pill/add.tsx` — snapshots `durationType`, `isMaintenanceInterval`, `requiresWeeklyWarning` from the chosen curated `DrugEntry` onto the new pill; manual-entry path defaults to `durationType: 'action'` with null duration (2×HL fallback).
+- `src/app/(main)/pill/[id].tsx` — `getTimerConfigs(durationType, isMaintenanceInterval)` builds the timer list dynamically:
+  - `'action'` → "Duration of Action" label
+  - `'interval'` → "Dosing Interval" (or "Maintenance Interval" when `isMaintenanceInterval`)
+  - `'none'` → third row omitted entirely
+  - `useEffect` falls back `preferredTimer → 'clearance'` when the saved choice is no longer rendered.
+  - Red safety banner renders above the title section when `requiresWeeklyWarning` (methotrexate).
+- `src/components/pills/PillCard.tsx` — guards dashboard rendering: if a legacy pill has `preferredTimer: 'action'` but `durationType: 'none'`, falls back to `'clearance'`.
+
+### Verification
+- `npx tsc --noEmit` passes clean.
+- Database counts confirmed via grep: 149 entries (30 A / 110 B / 7 C + 2 opioid splits).
+
+### Known follow-ups
+- Migrate existing rows once: curated pills created before 2026-04-16 will read `duration_type = 'action'` from the default column value; if that's wrong for a given drug (e.g. clonazepam now belongs in category B), users will need to delete + re-add to pick up the corrected snapshot. No retro-migration script ships since the DB values are snapshots by design.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission

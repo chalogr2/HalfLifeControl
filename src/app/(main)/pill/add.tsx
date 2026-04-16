@@ -10,7 +10,7 @@ import { usePillStore } from '@/stores/usePillStore';
 import { useSubscriptionStore, FREE_SCHEDULED_LIMIT, FREE_RANDOM_LIMIT } from '@/stores/useSubscriptionStore';
 import { completeOnboarding } from '@/services/supabase/auth';
 import { PILL_COLORS } from '@/core/pillColors';
-import type { PillType, ScheduleFrequency } from '@/core/types';
+import type { PillType, ScheduleFrequency, DurationType, TimerType } from '@/core/types';
 
 const FREQUENCY_OPTIONS: { label: string; value: ScheduleFrequency | 'as_needed' }[] = [
   { label: 'Every day', value: 'daily' },
@@ -46,6 +46,11 @@ export default function AddPillScreen() {
   const [halfLife, setHalfLife] = useState('');
   const [halfLifeUnit, setHalfLifeUnit] = useState<'minutes' | 'hours'>('hours');
   const [halfLifeSource, setHalfLifeSource] = useState<'curated' | 'manual'>('manual');
+  // Snapshotted from curated DB at pick time. null = no curated value → fall back to 2× half-life multiplier.
+  const [durationOfActionMinutes, setDurationOfActionMinutes] = useState<number | null>(null);
+  const [durationType, setDurationType] = useState<DurationType>('action');
+  const [isMaintenanceInterval, setIsMaintenanceInterval] = useState<boolean>(false);
+  const [requiresWeeklyWarning, setRequiresWeeklyWarning] = useState<boolean>(false);
   const [pillType, setPillType] = useState<PillType>(
     params.type === 'random' ? 'random' : 'scheduled',
   );
@@ -80,8 +85,16 @@ export default function AddPillScreen() {
       }
       setDosage(String(result.drug.commonDosageMg));
       setHalfLifeSource('curated');
+      setDurationOfActionMinutes(result.drug.durationOfActionMinutes);
+      setDurationType(result.drug.durationType ?? 'action');
+      setIsMaintenanceInterval(result.drug.isMaintenanceInterval ?? false);
+      setRequiresWeeklyWarning(result.drug.requiresWeeklyWarning ?? false);
     } else {
       setHalfLifeSource('manual');
+      setDurationOfActionMinutes(null);
+      setDurationType('action');
+      setIsMaintenanceInterval(false);
+      setRequiresWeeklyWarning(false);
     }
   }, []);
 
@@ -124,6 +137,10 @@ export default function AddPillScreen() {
         drugId: '',
         halfLifeMinutes,
         halfLifeSource,
+        durationOfActionMinutes,
+        durationType,
+        isMaintenanceInterval,
+        requiresWeeklyWarning,
         dosageMg: parseFloat(dosage) || 0,
         dosageUnit,
         pillType: effectivePillType,
