@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing[2],
   },
   tabLabel: {
+    fontFamily: 'PlusJakartaSans-Medium',
     fontSize: 12,
-    fontWeight: '500',
   },
 });

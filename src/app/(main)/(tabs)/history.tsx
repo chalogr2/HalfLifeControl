@@ -129,7 +129,7 @@ export default function HistoryScreen() {
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Typography variant="headlineMd">History</Typography>
+            <Typography variant="headlineLg" color="primary">History</Typography>
 
             {/* Adherence summary */}
             {dayGroups.length > 0 && (
@@ -161,6 +161,7 @@ export default function HistoryScreen() {
           </View>
         }
         renderSectionHeader={() => null}
+        renderSectionFooter={() => <View style={styles.sectionGap} />}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => handleDayPress(item.dateKey)}
@@ -169,9 +170,9 @@ export default function HistoryScreen() {
             accessibilityLabel={`${isToday(item.dateKey) ? 'Today' : item.label}, ${item.pillsTaken} pills taken, ${item.uniquePills} medications`}
             accessibilityHint="View day detail"
           >
-            <Card variant="elevated" style={styles.dayCard}>
+            <Card variant="scheduled" style={styles.dayCard}>
               <View style={styles.dayHeader}>
-                <Typography variant="titleMd">
+                <Typography variant="headlineSm">
                   {isToday(item.dateKey) ? 'Today' : item.label}
                 </Typography>
               </View>
@@ -180,7 +181,7 @@ export default function HistoryScreen() {
                   <Typography variant="headlineSm" color="primary">
                     {item.pillsTaken}
                   </Typography>
-                  <Typography variant="labelMd" color="onSurfaceVariant">
+                  <Typography variant="bodyMd" color="onSurfaceVariant">
                     pills taken
                   </Typography>
                 </View>
@@ -188,7 +189,7 @@ export default function HistoryScreen() {
                   <Typography variant="headlineSm" color="secondary">
                     {item.uniquePills}
                   </Typography>
-                  <Typography variant="labelMd" color="onSurfaceVariant">
+                  <Typography variant="bodyMd" color="onSurfaceVariant">
                     medications
                   </Typography>
                 </View>
@@ -214,7 +215,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[24],
+    paddingBottom: 120,
   },
   header: {
     paddingTop: spacing[2],
@@ -223,8 +224,8 @@ const styles = StyleSheet.create({
   },
   adherenceCard: {
     backgroundColor: colors.surfaceContainerLow,
-    borderRadius: borderRadius.xl,
-    padding: spacing[5],
+    borderRadius: borderRadius['2xl'],
+    padding: spacing[6],
     gap: spacing[2],
   },
   adherenceRow: {
@@ -236,7 +237,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dayCard: {
-    gap: spacing[3],
+    gap: spacing[4],
+    padding: spacing[6],
+    borderRadius: borderRadius['2xl'],
   },
   dayHeader: {
     flexDirection: 'row',
@@ -246,12 +249,18 @@ const styles = StyleSheet.create({
   dayStats: {
     flexDirection: 'row',
     gap: spacing[8],
+    paddingTop: spacing[4],
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceVariant + '4D', // ~30% opacity
   },
   stat: {
     gap: spacing[1],
   },
   separator: {
-    height: spacing[3],
+    height: spacing[8],
+  },
+  sectionGap: {
+    height: spacing[3], // 12px — matches dashboard item separator
   },
   empty: {
     paddingVertical: spacing[16],

@@ -20,10 +20,12 @@ export const spacing = {
 } as const;
 
 export const borderRadius = {
-  sm: 4,   // 0.25rem
-  md: 8,   // 0.5rem
-  lg: 12,  // 0.75rem
-  xl: 24,  // 1.5rem — primary buttons
+  sm: 4,    // 0.25rem
+  md: 8,    // 0.5rem
+  lg: 12,   // 0.75rem
+  xl: 24,   // 1.5rem — primary buttons
+  '2xl': 32, // 2rem — large cards (history, adherence)
+  '3xl': 40, // 2.5rem — hero sections
   full: 9999,
 } as const;
 

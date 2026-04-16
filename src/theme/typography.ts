@@ -4,114 +4,106 @@
  *
  * Scale follows "Soft Editorialism" — large, legible, breathable.
  * Minimum body text: 16px. No core UX text below this.
+ *
+ * IMPORTANT: React Native ignores fontWeight for custom fonts loaded via
+ * expo-font. Each weight variant must use the exact font family name that
+ * matches the file registered in useFonts (e.g. 'Lexend-Bold', not 'Lexend'
+ * + fontWeight:'700'). fontWeight is omitted here to avoid platform confusion.
  */
-
-export const fontFamilies = {
-  headline: 'Lexend',
-  body: 'PlusJakartaSans',
-  label: 'PlusJakartaSans',
-} as const;
 
 export const typography = {
   // Display — countdown timers, large dosage numbers
   displayLg: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 56, // 3.5rem
-    fontWeight: '300' as const,
+    fontFamily: 'Lexend-Light',   // 300
+    fontSize: 56,
     lineHeight: 64,
   },
   displayMd: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 45, // 2.8125rem
-    fontWeight: '400' as const,
+    fontFamily: 'Lexend',         // 400
+    fontSize: 45,
     lineHeight: 52,
   },
   displaySm: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 36, // 2.25rem
-    fontWeight: '400' as const,
+    fontFamily: 'Lexend',         // 400
+    fontSize: 36,
     lineHeight: 44,
   },
 
   // Headlines — medication names, section titles
   headlineLg: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 32, // 2rem
-    fontWeight: '600' as const,
+    fontFamily: 'Lexend-SemiBold', // 600
+    fontSize: 32,
     lineHeight: 40,
   },
   headlineMd: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 28, // 1.75rem
-    fontWeight: '600' as const,
+    fontFamily: 'Lexend-SemiBold', // 600
+    fontSize: 28,
     lineHeight: 36,
   },
   headlineSm: {
-    fontFamily: fontFamilies.headline,
-    fontSize: 24, // 1.5rem
-    fontWeight: '500' as const,
+    fontFamily: 'Lexend-Medium',   // 500
+    fontSize: 24,
     lineHeight: 32,
   },
 
-  // Title — button text, card titles
+  // Title — button text, card titles, section headers
+  // Stitch uses font-headline (Lexend) for all titles, not just headlines
   titleLg: {
-    fontFamily: fontFamilies.body,
-    fontSize: 22, // 1.375rem
-    fontWeight: '600' as const,
+    fontFamily: 'Lexend-SemiBold', // 600
+    fontSize: 22,
     lineHeight: 28,
   },
   titleMd: {
-    fontFamily: fontFamilies.body,
-    fontSize: 18, // 1.125rem
-    fontWeight: '600' as const,
+    fontFamily: 'Lexend-SemiBold', // 600
+    fontSize: 18,
     lineHeight: 24,
   },
   titleSm: {
-    fontFamily: fontFamilies.body,
-    fontSize: 14, // 0.875rem
-    fontWeight: '600' as const,
+    fontFamily: 'Lexend-Medium', // 500
+    fontSize: 14,
     lineHeight: 20,
   },
 
   // Body — instructional text, descriptions
   bodyLg: {
-    fontFamily: fontFamilies.body,
-    fontSize: 16, // 1rem — minimum for core UX
-    fontWeight: '400' as const,
+    fontFamily: 'PlusJakartaSans', // 400
+    fontSize: 16,
     lineHeight: 24,
   },
   bodyMd: {
-    fontFamily: fontFamilies.body,
-    fontSize: 14, // 0.875rem
-    fontWeight: '400' as const,
+    fontFamily: 'PlusJakartaSans', // 400
+    fontSize: 14,
     lineHeight: 20,
   },
   bodySm: {
-    fontFamily: fontFamilies.body,
-    fontSize: 12, // 0.75rem
-    fontWeight: '400' as const,
+    fontFamily: 'PlusJakartaSans', // 400
+    fontSize: 12,
     lineHeight: 16,
   },
 
   // Label — metadata, secondary info
   labelLg: {
-    fontFamily: fontFamilies.label,
+    fontFamily: 'PlusJakartaSans-Medium', // 500
     fontSize: 14,
-    fontWeight: '500' as const,
     lineHeight: 20,
   },
   labelMd: {
-    fontFamily: fontFamilies.label,
+    fontFamily: 'PlusJakartaSans-Medium', // 500
     fontSize: 12,
-    fontWeight: '500' as const,
     lineHeight: 16,
   },
   labelSm: {
-    fontFamily: fontFamilies.label,
+    fontFamily: 'PlusJakartaSans-Medium', // 500
     fontSize: 11,
-    fontWeight: '500' as const,
     lineHeight: 16,
   },
 } as const;
 
 export type TypographyVariant = keyof typeof typography;
+
+/** Kept for backwards-compat with index.ts re-export; use the named font strings directly. */
+export const fontFamilies = {
+  headline: 'Lexend',
+  body: 'PlusJakartaSans',
+  label: 'PlusJakartaSans',
+} as const;

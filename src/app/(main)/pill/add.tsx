@@ -189,12 +189,12 @@ export default function AddPillScreen() {
           >
             <Typography variant="bodyLg" color="primary">Cancel</Typography>
           </Pressable>
-          <Typography variant="titleLg">Refined Add Medication V2</Typography>
+          <Typography variant="titleLg">Add Medication</Typography>
           <View style={{ width: 50 }} />
         </View>
 
         {/* Title */}
-        <Typography variant="headlineMd" style={styles.title}>
+        <Typography variant="headlineMd" color="primary" style={styles.title}>
           Which pill are you adding?
         </Typography>
         <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.titleSub}>
@@ -210,7 +210,7 @@ export default function AddPillScreen() {
             <View style={styles.sectionIcon}>
               <Typography variant="labelMd" color="onPrimary">2</Typography>
             </View>
-            <Typography variant="titleMd">Dosage</Typography>
+            <Typography variant="titleMd" color="primary">Dosage</Typography>
           </View>
           <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
             How much do you take?
@@ -243,7 +243,7 @@ export default function AddPillScreen() {
               <View style={styles.sectionIcon}>
                 <Typography variant="labelMd" color="onPrimary">HL</Typography>
               </View>
-              <Typography variant="titleMd">Half-Life</Typography>
+              <Typography variant="titleMd" color="primary">Half-Life</Typography>
             </View>
             <View style={styles.row}>
               <View style={{ flex: 2 }}>
@@ -296,7 +296,7 @@ export default function AddPillScreen() {
               <View style={styles.sectionIcon}>
                 <Typography variant="labelMd" color="onPrimary">3</Typography>
               </View>
-              <Typography variant="titleMd">Schedule</Typography>
+              <Typography variant="titleMd" color="primary">Schedule</Typography>
             </View>
 
             {/* Frequency toggles */}
@@ -374,7 +374,7 @@ export default function AddPillScreen() {
             <View style={styles.sectionIcon}>
               <Typography variant="labelMd" color="onPrimary">4</Typography>
             </View>
-            <Typography variant="titleMd">Pill Color</Typography>
+            <Typography variant="titleMd" color="primary">Pill Color</Typography>
           </View>
           <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
             Visual Identity
@@ -397,8 +397,8 @@ export default function AddPillScreen() {
           </View>
         </View>
 
-        {/* Spacer for FAB */}
-        <View style={{ height: spacing[24] }} />
+        {/* Spacer: must clear the fixed bottom CTA (padding 24 + button 64 + paddingBottom 40 = 128px, plus buffer) */}
+        <View style={{ height: 148 }} />
       </ScrollView>
 
       {/* Fixed bottom CTA */}

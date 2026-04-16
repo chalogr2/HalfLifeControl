@@ -105,7 +105,7 @@ function AuthGate() {
 }
 
 function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Lexend: require('../../assets/fonts/Lexend-Regular.ttf'),
     'Lexend-Light': require('../../assets/fonts/Lexend-Light.ttf'),
     'Lexend-Medium': require('../../assets/fonts/Lexend-Medium.ttf'),
@@ -117,6 +117,12 @@ function RootLayout() {
     'PlusJakartaSans-SemiBold': require('../../assets/fonts/PlusJakartaSans-SemiBold.ttf'),
     'PlusJakartaSans-Bold': require('../../assets/fonts/PlusJakartaSans-Bold.ttf'),
   });
+
+  useEffect(() => {
+    if (fontError) {
+      console.error('[Fonts] Failed to load custom fonts:', fontError);
+    }
+  }, [fontError]);
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {

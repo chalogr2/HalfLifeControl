@@ -36,7 +36,23 @@
           "root": "./src/app"
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Lexend-Regular.ttf",
+            "./assets/fonts/Lexend-Light.ttf",
+            "./assets/fonts/Lexend-Medium.ttf",
+            "./assets/fonts/Lexend-SemiBold.ttf",
+            "./assets/fonts/Lexend-Bold.ttf",
+            "./assets/fonts/PlusJakartaSans-Regular.ttf",
+            "./assets/fonts/PlusJakartaSans-Light.ttf",
+            "./assets/fonts/PlusJakartaSans-Medium.ttf",
+            "./assets/fonts/PlusJakartaSans-SemiBold.ttf",
+            "./assets/fonts/PlusJakartaSans-Bold.ttf"
+          ]
+        }
+      ],
       [
         "expo-notifications",
         {

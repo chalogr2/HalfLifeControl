@@ -42,8 +42,8 @@ export function Card({
 const styles = StyleSheet.create({
   base: {
     backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
+    borderRadius: borderRadius.xl,
+    padding: spacing[5],
   },
   scheduled: {
     borderLeftWidth: 6,

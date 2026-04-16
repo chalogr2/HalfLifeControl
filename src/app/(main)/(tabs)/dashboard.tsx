@@ -115,7 +115,7 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Typography variant="headlineMd">My Daily Stack</Typography>
+        <Typography variant="headlineMd" color="primary">My Daily Stack</Typography>
         <Pressable
           style={styles.avatar}
           accessibilityRole="button"
@@ -132,7 +132,7 @@ export default function DashboardScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderPill}
         renderSectionHeader={({ section }) => (
-          <Typography variant="titleMd" color="onSurfaceVariant" style={styles.sectionHeader}>
+          <Typography variant="titleMd" color="primary" style={styles.sectionHeader}>
             {section.title}
           </Typography>
         )}

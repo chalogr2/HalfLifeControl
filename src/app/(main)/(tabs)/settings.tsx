@@ -52,10 +52,10 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Typography variant="headlineMd" style={styles.title}>Settings</Typography>
+        <Typography variant="headlineMd" color="primary" style={styles.title}>Settings</Typography>
 
         {/* Reminders section */}
-        <Typography variant="titleMd" style={styles.sectionTitle}>Reminders</Typography>
+        <Typography variant="titleMd" color="primary" style={styles.sectionTitle}>Reminders</Typography>
         <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
           Customize how you would like to be notified about your medications.
         </Typography>
