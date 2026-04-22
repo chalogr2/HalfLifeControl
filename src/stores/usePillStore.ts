@@ -51,12 +51,22 @@ interface PillState {
     source: DoseSource,
   ) => Promise<string>;
   dismissDose: (userId: string, doseId: string) => Promise<void>;
+
+  /**
+   * Local-only: drop active doses whose eliminationAt has passed. Lets the
+   * dashboard stop showing one-time pills the instant their timer completes
+   * without waiting for a Supabase round-trip.
+   */
+  pruneExpiredDoses: () => void;
 }
 
 function applyDashboard(set: (partial: Partial<PillState>) => void, data: DashboardDocument) {
+  const now = Date.now();
   set({
     pills: data.pills.filter((p) => p.isActive),
-    activeDoses: data.activeDoses,
+    activeDoses: data.activeDoses.filter(
+      (d) => d.status === 'active' && d.eliminationAt.getTime() > now,
+    ),
   });
 }
 
@@ -120,5 +130,16 @@ export const usePillStore = create<PillState>((set) => ({
   dismissDose: async (userId, doseId) => {
     const dashboard = await fbUpdateDoseStatus(userId, doseId, 'dismissed');
     applyDashboard(set, dashboard);
+  },
+
+  pruneExpiredDoses: () => {
+    const now = Date.now();
+    set((state) => {
+      const stillActive = state.activeDoses.filter(
+        (d) => d.status === 'active' && d.eliminationAt.getTime() > now,
+      );
+      if (stillActive.length === state.activeDoses.length) return state;
+      return { ...state, activeDoses: stillActive };
+    });
   },
 }));

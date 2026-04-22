@@ -82,10 +82,10 @@ export default function SettingsScreen() {
                     {reminderMode === opt.value && <View style={styles.radioInner} />}
                   </View>
                   <View style={styles.reminderContent}>
-                    <Typography variant="titleSm" color="onSurface">
+                    <Typography variant="titleMd" color="onSurface">
                       {opt.title}
                     </Typography>
-                    <Typography variant="bodyMd" color="onSurfaceVariant">
+                    <Typography variant="bodyLg" color="onSurfaceVariant">
                       {opt.description}
                     </Typography>
                   </View>
@@ -105,7 +105,7 @@ export default function SettingsScreen() {
           >
             <View style={styles.proCardContent}>
               <Typography variant="titleMd" color="onPrimary">Upgrade to Pro</Typography>
-              <Typography variant="bodyMd" color="onPrimaryContainer">
+              <Typography variant="bodyLg" color="onPrimaryContainer">
                 Unlock unlimited scheduled pills and future features.
               </Typography>
             </View>
@@ -117,7 +117,7 @@ export default function SettingsScreen() {
               <Typography variant="labelSm" color="onPrimary">PRO</Typography>
             </View>
             <Typography variant="titleMd">Pro Plan Active</Typography>
-            <Typography variant="bodyMd" color="onSurfaceVariant">
+            <Typography variant="bodyLg" color="onSurfaceVariant">
               You have access to all features.
             </Typography>
           </Card>

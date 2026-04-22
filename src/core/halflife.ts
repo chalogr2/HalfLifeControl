@@ -3,7 +3,7 @@
  * Can be extracted for Watch apps.
  */
 
-import type { TimerType } from './types';
+import type { DurationType, TimerType } from './types';
 
 /**
  * Multiplier for each timer type (applied to halfLifeMinutes).
@@ -95,6 +95,59 @@ export function timerProgress(
   if (totalMs <= 0) return 1;
   const elapsed = now.getTime() - takenAt.getTime();
   return Math.min(1, Math.max(0, elapsed / totalMs));
+}
+
+/**
+ * The list of timer types available for a pill given its duration classification.
+ * Category C (durationType === 'none') drops the 'action' timer entirely.
+ */
+export function availableTimerTypes(durationType: DurationType): TimerType[] {
+  if (durationType === 'none') return ['halfLife', 'clearance'];
+  return ['action', 'halfLife', 'clearance'];
+}
+
+/**
+ * Pick which timer to DISPLAY for an active dose.
+ * - If the user's preferred timer is still active, use it.
+ * - Otherwise pick the still-active timer with the smallest remaining (next closest to zero).
+ * - Returns null only when every available timer has hit zero (dose is fully eliminated).
+ *
+ * Pure math — safe to recompute every render.
+ */
+export function pickEffectiveTimer(
+  preferredTimer: TimerType,
+  takenAt: Date,
+  halfLifeMinutes: number,
+  durationOfActionMinutes: number | null | undefined,
+  availableTypes: TimerType[],
+  now: Date = new Date(),
+): TimerType | null {
+  const rem = (t: TimerType) =>
+    timerMinutesRemaining(takenAt, halfLifeMinutes, t, now, durationOfActionMinutes);
+
+  const active = availableTypes.filter((t) => rem(t) > 0);
+  if (active.length === 0) return null;
+
+  if (active.includes(preferredTimer)) return preferredTimer;
+
+  return active.reduce((best, t) => (rem(t) < rem(best) ? t : best));
+}
+
+/**
+ * Human-readable label for a timer. "In blood stream" is reserved for the
+ * clearance timer; the 'action' label varies by duration classification.
+ */
+export function timerLabel(
+  timerType: TimerType,
+  durationType: DurationType,
+  isMaintenanceInterval: boolean = false,
+): string {
+  if (timerType === 'halfLife') return 'Half-Life';
+  if (timerType === 'clearance') return 'In blood stream';
+  if (durationType === 'interval') {
+    return isMaintenanceInterval ? 'Maintenance Interval' : 'Dosing Interval';
+  }
+  return 'Duration of Action';
 }
 
 /** Format minutes as "Xh Ym", "Ym Zs", or "Xh" depending on magnitude. */

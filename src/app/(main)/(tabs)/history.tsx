@@ -181,7 +181,7 @@ export default function HistoryScreen() {
                   <Typography variant="headlineSm" color="primary">
                     {item.pillsTaken}
                   </Typography>
-                  <Typography variant="bodyMd" color="onSurfaceVariant">
+                  <Typography variant="bodyLg" color="onSurfaceVariant">
                     pills taken
                   </Typography>
                 </View>
@@ -189,7 +189,7 @@ export default function HistoryScreen() {
                   <Typography variant="headlineSm" color="secondary">
                     {item.uniquePills}
                   </Typography>
-                  <Typography variant="bodyMd" color="onSurfaceVariant">
+                  <Typography variant="bodyLg" color="onSurfaceVariant">
                     medications
                   </Typography>
                 </View>

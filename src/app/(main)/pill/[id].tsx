@@ -16,7 +16,7 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { describeSchedule } from '@/core/scheduling';
-import { timerDurationMinutes, formatTimeRemaining, timerMinutesRemaining, timerProgress } from '@/core/halflife';
+import { timerDurationMinutes, formatTimeRemaining, timerMinutesRemaining } from '@/core/halflife';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import type { TimerType, Dose, DurationType } from '@/core/types';
 
@@ -79,20 +79,27 @@ function DetailTimerRing({
   const circumference = 2 * Math.PI * radius;
   const remaining = 1 - Math.min(1, Math.max(0, progress));
   const strokeDashoffset = circumference * (1 - remaining);
-  const ringColor = isSelected ? colors.secondary : colors.primaryContainer;
+  const ringColor = isDone
+    ? colors.outlineVariant
+    : isSelected
+    ? colors.secondary
+    : colors.primaryContainer;
 
   return (
     <Pressable
       style={[
         styles.timerButton,
-        isSelected && styles.timerButtonSelected,
+        isSelected && !isDone && styles.timerButtonSelected,
+        isDone && styles.timerButtonDone,
       ]}
-      onPress={onPress}
+      onPress={isDone ? undefined : onPress}
+      disabled={isDone}
       accessibilityRole="button"
-      accessibilityLabel={`${config.label}, ${isDone ? 'complete' : timeLabel + ' remaining'}${isSelected ? ', selected as dashboard timer' : ''}`}
-      accessibilityHint="Tap to set as your dashboard timer"
+      accessibilityState={{ disabled: isDone, selected: isSelected && !isDone }}
+      accessibilityLabel={`${config.label}, ${isDone ? 'complete, unavailable' : timeLabel + ' remaining'}${isSelected && !isDone ? ', selected as dashboard timer' : ''}`}
+      accessibilityHint={isDone ? undefined : 'Tap to set as your dashboard timer'}
     >
-      {isSelected && (
+      {isSelected && !isDone && (
         <View style={styles.checkBadge}>
           <Ionicons name="checkmark" size={16} color="#fff" />
         </View>
@@ -118,7 +125,7 @@ function DetailTimerRing({
         <View style={styles.ringLabel}>
           <Typography
             variant="titleMd"
-            color={isSelected ? 'secondary' : 'primary'}
+            color={isDone ? 'outline' : isSelected ? 'secondary' : 'primary'}
             align="center"
           >
             {isDone ? 'Done' : timeLabel}
@@ -137,7 +144,7 @@ function DetailTimerRing({
       </View>
       <Typography
         variant="labelLg"
-        color={isSelected ? 'primary' : 'onSurface'}
+        color={isDone ? 'outline' : isSelected ? 'primary' : 'onSurface'}
         style={styles.timerLabel}
       >
         {config.label}
@@ -254,18 +261,19 @@ export default function PillDetailScreen() {
   // echo, snap the UI back to stale values mid-tap).
   const [selectedTimer, setSelectedTimer] = useState<TimerType | undefined>(pill?.preferredTimer);
   const initialTimerRef = useRef<TimerType | undefined>(pill?.preferredTimer);
+  // Tracks what should be persisted — the user's LAST EXPLICIT pick. Auto-switch
+  // (when the selected timer finishes) moves `selectedTimer` for visual purposes
+  // but leaves this untouched, so a transient rollover doesn't become permanent.
+  const persistTimerRef = useRef<TimerType | undefined>(pill?.preferredTimer);
   const latestRef = useRef<{
-    selectedTimer: TimerType | undefined;
     userId: string | undefined;
     pillId: string | undefined;
     wasDeleted: boolean;
   }>({
-    selectedTimer: pill?.preferredTimer,
     userId: user?.uid,
     pillId: pill?.id,
     wasDeleted: false,
   });
-  latestRef.current.selectedTimer = selectedTimer;
   latestRef.current.userId = user?.uid;
   latestRef.current.pillId = pill?.id;
 
@@ -273,6 +281,7 @@ export default function PillDetailScreen() {
   useEffect(() => {
     if (pill?.preferredTimer && initialTimerRef.current === undefined) {
       initialTimerRef.current = pill.preferredTimer;
+      persistTimerRef.current = pill.preferredTimer;
       setSelectedTimer(pill.preferredTimer);
     }
   }, [pill?.preferredTimer]);
@@ -280,7 +289,8 @@ export default function PillDetailScreen() {
   // Persist the selection once, on unmount, if it changed and the pill wasn't deleted.
   useEffect(() => {
     return () => {
-      const { selectedTimer: current, userId, pillId, wasDeleted } = latestRef.current;
+      const { userId, pillId, wasDeleted } = latestRef.current;
+      const current = persistTimerRef.current;
       if (wasDeleted) return;
       if (!userId || !pillId || !current) return;
       if (current === initialTimerRef.current) return;
@@ -303,12 +313,69 @@ export default function PillDetailScreen() {
   // If the persisted preferredTimer points to a timer we no longer show
   // (e.g. 'action' on a Category C pill), fall back to 'clearance'.
   useEffect(() => {
-    const current = latestRef.current.selectedTimer;
-    if (!current) return;
-    if (!timerConfigs.some((c) => c.type === current)) {
+    if (!selectedTimer) return;
+    if (!timerConfigs.some((c) => c.type === selectedTimer)) {
       setSelectedTimer('clearance');
+      persistTimerRef.current = 'clearance';
     }
-  }, [timerConfigs]);
+  }, [timerConfigs, selectedTimer]);
+
+  // Tick every second while a dose is active so `doneMap` and the auto-switch
+  // effect below stay in sync with the individual timer rings (which also tick
+  // internally via useCountdown). One setInterval for the whole screen is fine.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!activeDose) return;
+    const id = setInterval(() => forceTick((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, [activeDose?.id]);
+
+  // Which timers have hit zero for the current active dose. Recomputed on every
+  // render (which `forceTick` drives during an active dose).
+  const doneMap = useMemo<Record<TimerType, boolean>>(() => {
+    const map: Record<TimerType, boolean> = { action: false, halfLife: false, clearance: false };
+    if (!activeDose) return map;
+    const now = new Date();
+    for (const cfg of timerConfigs) {
+      const rem = timerMinutesRemaining(
+        activeDose.takenAt,
+        activeDose.halfLifeMinutes,
+        cfg.type,
+        now,
+        activeDose.durationOfActionMinutes,
+      );
+      map[cfg.type] = rem <= 0;
+    }
+    return map;
+    // forceTick is deliberately excluded: the tick state-update causes a re-render,
+    // which rebuilds this memo via its `activeDose` dep proxy (new `now` each time).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDose, timerConfigs]);
+
+  // Visual auto-switch: if the user's selected timer finishes, display the next
+  // still-active one closest to zero. Does NOT touch `persistTimerRef` or the
+  // store — we keep the user's explicit choice intact; the dashboard applies
+  // the same rollover logic via `pickEffectiveTimer` on its own.
+  useEffect(() => {
+    if (!activeDose || !selectedTimer) return;
+    if (!doneMap[selectedTimer]) return;
+    const now = new Date();
+    const candidates = timerConfigs
+      .filter((c) => !doneMap[c.type])
+      .map((c) => ({
+        type: c.type,
+        rem: timerMinutesRemaining(
+          activeDose.takenAt,
+          activeDose.halfLifeMinutes,
+          c.type,
+          now,
+          activeDose.durationOfActionMinutes,
+        ),
+      }));
+    if (candidates.length === 0) return;
+    candidates.sort((a, b) => a.rem - b.rem);
+    setSelectedTimer(candidates[0].type);
+  }, [doneMap, selectedTimer, activeDose, timerConfigs]);
 
   if (!pill) {
     return (
@@ -322,10 +389,14 @@ export default function PillDetailScreen() {
 
   const handleSelectTimer = (timerType: TimerType) => {
     if (selectedTimer === timerType) return;
+    // Guard against picking a finished timer (shouldn't be reachable since done
+    // rings have onPress cleared, but belt-and-suspenders).
+    if (doneMap[timerType]) return;
     // Update local UI state (this screen) AND the Zustand store so the dashboard
     // already reflects the new timer the moment the user returns. The actual
     // Firestore/cache write happens once, on unmount, to avoid per-tap spam.
     setSelectedTimer(timerType);
+    persistTimerRef.current = timerType;
     setPillPreferredTimerLocal(pill.id, timerType);
   };
 
@@ -474,18 +545,30 @@ export default function PillDetailScreen() {
           </View>
         </View>
 
-        {/* Edit dosage */}
-        <View style={styles.dosageSection}>
-          <Typography variant="titleLg" color="onSurface">
+        {/* Edit dosage — locked while the pill has an active dose to avoid
+            shifting historical math mid-countdown. */}
+        <View style={[styles.dosageSection, !!activeDose && styles.dosageSectionDisabled]}>
+          <Typography variant="titleLg" color={activeDose ? 'onSurfaceVariant' : 'onSurface'}>
             Edit Dosage
           </Typography>
+          {activeDose && (
+            <Typography variant="bodySm" color="onSurfaceVariant" style={styles.dosageLockedHint}>
+              Locked while a timer is active.
+            </Typography>
+          )}
           <Pressable
-            style={styles.dosageRow}
-            onPress={startEditDosage}
+            style={[styles.dosageRow, !!activeDose && styles.dosageRowDisabled]}
+            onPress={activeDose ? undefined : startEditDosage}
+            disabled={!!activeDose}
             accessibilityRole="button"
-            accessibilityLabel={`Current dosage: ${pill.dosageMg} ${pill.dosageUnit}. Tap to edit.`}
+            accessibilityState={{ disabled: !!activeDose }}
+            accessibilityLabel={
+              activeDose
+                ? `Dosage ${pill.dosageMg} ${pill.dosageUnit}. Locked while a timer is active.`
+                : `Current dosage: ${pill.dosageMg} ${pill.dosageUnit}. Tap to edit.`
+            }
           >
-            {editingDosage ? (
+            {editingDosage && !activeDose ? (
               <TextInput
                 style={styles.dosageInput}
                 value={dosageText}
@@ -498,7 +581,11 @@ export default function PillDetailScreen() {
               />
             ) : (
               <View style={styles.dosageDisplay}>
-                <Typography variant="displaySm" color="primary" align="center">
+                <Typography
+                  variant="displaySm"
+                  color={activeDose ? 'onSurfaceVariant' : 'primary'}
+                  align="center"
+                >
                   {pill.dosageMg}
                 </Typography>
               </View>
@@ -602,6 +689,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  timerButtonDone: {
+    opacity: 0.45,
+  },
   checkBadge: {
     position: 'absolute',
     top: -6,
@@ -646,6 +736,12 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.primary,
     marginBottom: spacing[6],
   },
+  dosageSectionDisabled: {
+    borderLeftColor: colors.outlineVariant,
+  },
+  dosageLockedHint: {
+    marginTop: spacing[1],
+  },
   dosageRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,6 +751,9 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     borderRadius: borderRadius.xl,
     marginTop: spacing[4],
+  },
+  dosageRowDisabled: {
+    opacity: 0.5,
   },
   dosageDisplay: {
     width: 120,

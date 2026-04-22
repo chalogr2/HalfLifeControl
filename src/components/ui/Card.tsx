@@ -52,8 +52,7 @@ const styles = StyleSheet.create({
   random: {
     backgroundColor: colors.surfaceContainer,
     borderWidth: 1.5,
-    borderColor: colors.outlineVariant + '66', // 40% opacity
-    borderStyle: 'dashed',
+    borderColor: colors.outlineVariant + '99', // 60% opacity, solid
   },
   outlined: {
     borderWidth: 1,

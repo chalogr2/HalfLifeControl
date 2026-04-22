@@ -19,7 +19,7 @@ interface Section {
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { pills, activeDoses, isLoading, recordDose } = usePillStore();
+  const { pills, activeDoses, isLoading, recordDose, pruneExpiredDoses } = usePillStore();
 
   // Schedule notifications when pills change
   useEffect(() => {
@@ -27,6 +27,29 @@ export default function DashboardScreen() {
       scheduleAllPillReminders(pills);
     }
   }, [pills]);
+
+  // Real-time pruning: when an active dose's eliminationAt passes, drop it from
+  // the store immediately so random-tracking pills disappear without requiring
+  // a tap. One-shot setTimeouts per active dose — far cheaper than a poll loop,
+  // and guarantees the exact moment of expiry triggers a re-render.
+  useEffect(() => {
+    if (activeDoses.length === 0) return;
+    const now = Date.now();
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const d of activeDoses) {
+      const delay = d.eliminationAt.getTime() - now;
+      if (delay <= 0) {
+        // Already expired on mount — prune on next tick, don't block render.
+        timers.push(setTimeout(pruneExpiredDoses, 0));
+      } else if (delay < 24 * 60 * 60 * 1000) {
+        // Only schedule timers up to 24h out; a re-render will cover longer horizons.
+        timers.push(setTimeout(pruneExpiredDoses, delay + 250));
+      }
+    }
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
+  }, [activeDoses, pruneExpiredDoses]);
 
   // Handle notification taps — record dose for the tapped pill
   useEffect(() => {
@@ -115,7 +138,7 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Typography variant="headlineMd" color="primary">My Daily Stack</Typography>
+        <Typography variant="headlineMd" color="primary">Dashboard</Typography>
         <Pressable
           style={styles.avatar}
           accessibilityRole="button"
@@ -132,7 +155,7 @@ export default function DashboardScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderPill}
         renderSectionHeader={({ section }) => (
-          <Typography variant="titleMd" color="primary" style={styles.sectionHeader}>
+          <Typography variant="titleLg" color="primary" style={styles.sectionHeader}>
             {section.title}
           </Typography>
         )}
@@ -204,8 +227,8 @@ const styles = StyleSheet.create({
   addToStack: {
     alignItems: 'center',
     paddingVertical: spacing[4],
-    marginTop: spacing[2],
-    borderRadius: borderRadius.lg,
+    marginTop: spacing[3],
+    borderRadius: borderRadius.xl,
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: colors.outlineVariant,

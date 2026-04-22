@@ -1003,6 +1003,53 @@ The third timer on the detail screen was computed as `2 × halfLife` for every d
 
 ---
 
+## Dashboard Status + Timer Rollover Polish (2026-04-22)
+
+### Context
+A Sonnet-driven Stitch design pass (commit `ebe1fc3`) refined fonts/spacing but introduced two regressions and exposed an older UX gap. This session fixed both regressions and added per-timer rollover / lock semantics.
+
+### Regressions fixed
+- **One-time pills lingered on the dashboard after their timer completed** and reappeared as ghosts on cold start. Root cause: `applyDashboard` wrote all cached active doses into the store without filtering by `eliminationAt`, and the dashboard's `useMemo`-gated list never recomputed on time passage.
+  - `src/stores/usePillStore.ts` — `applyDashboard` now filters `activeDoses` to `status === 'active' && eliminationAt > now`. Added `pruneExpiredDoses()` action that trims expired doses in place.
+  - `src/app/(main)/(tabs)/dashboard.tsx` — added a `useEffect` that schedules one-shot `setTimeout`s at each active dose's `eliminationAt` so the prune fires at the exact expiry moment. Clamped to 24 h horizon; a re-render covers anything longer.
+- **Play button on `PillCard` stopped firing** after the Stitch pass nested the play Pressable inside the card Pressable and relied on `e.stopPropagation()`. That's a no-op on RN synthetic events and nested Pressables don't reliably isolate under the New Architecture + React 19.
+  - `src/components/pills/PillCard.tsx` — restructured so the card Pressable and play-button Pressable are **siblings** inside a parent `View`. The play button is absolutely positioned over the card's right edge; visual layout is unchanged, each Pressable owns its own responder.
+
+### Dynamic dashboard status text
+The pill card status row used to read `"In blood stream"` for any active dose. Now it reflects the specific timer being displayed — `"In blood stream"` is reserved for the clearance timer.
+- `src/core/halflife.ts` — new pure helper `timerLabel(timerType, durationType, isMaintenanceInterval)`:
+  - `halfLife` → `"Half-Life"`
+  - `clearance` → `"In blood stream"`
+  - `action` + `durationType: 'action'` → `"Duration of Action"`
+  - `action` + `durationType: 'interval'` → `"Dosing Interval"` (or `"Maintenance Interval"` for weekly drugs)
+- `src/components/pills/PillCard.tsx` — `statusText` derived from `timerLabel(effectiveTimer, activeDose.durationType, activeDose.isMaintenanceInterval)`; `"Inactive"` when no active dose.
+
+### Auto-switching display timer (dashboard)
+To avoid ever showing a timer at 0 on the dashboard, the displayed timer rolls over to the next-closest-to-zero as each one finishes. The user's explicit `preferredTimer` is untouched.
+- `src/core/halflife.ts` — new pure helpers:
+  - `availableTimerTypes(durationType)` — returns the timer types that exist for the pill (Category C drops `action`).
+  - `pickEffectiveTimer(preferred, takenAt, halfLifeMinutes, durationOfActionMinutes, available, now?)` — returns `preferred` if still active, else the active timer with smallest remaining, else `null`.
+- `src/components/pills/PillCard.tsx` — computes `effectiveTimer` via `pickEffectiveTimer` on every render and passes it to `CountdownTimer`. Schedules one-shot `setTimeout`s at each timer's zero-crossing (capped at 24 h) to force a rollover re-render the instant a timer finishes — cheaper than a 1 s poll. Replaces the old Category C-only `'action' → 'clearance'` patch since the new helper covers all rollover paths uniformly.
+
+### Pill detail screen: grey out finished timers + auto-switch visual
+- `DetailTimerRing` greys out + clears `onPress` + sets `accessibilityState.disabled` when `minutesRemaining <= 0`. Check badge only shows on an active selected timer; ring colour and labels use `outline` when done.
+- `PillDetailScreen` decouples persistence from visual state:
+  - `selectedTimer` (state) — drives the check badge / display.
+  - `persistTimerRef` (ref) — only updated on **explicit user taps**; this is what gets written to Supabase on unmount.
+  - `initialTimerRef` (ref) — baseline captured at mount for the "did it change?" comparison.
+  - When the user's selected timer hits zero, an effect moves `selectedTimer` to the still-active timer with smallest remaining. `persistTimerRef` is untouched, so a transient rollover doesn't become the new persisted pick.
+  - `doneMap` is derived every render (driven by a 1 s `setInterval` that only runs while `activeDose` exists) and passed into the auto-switch effect and the handler guard. `handleSelectTimer` now refuses picks against finished timers (belt-and-suspenders on top of the cleared `onPress`).
+
+### Edit Dosage locked while a pill is active
+Changing `dosageMg` mid-countdown is suppressed to avoid confusing the user about whether it reshapes historical dose math (it doesn't — snapshots are immutable — but the edit still shouldn't be offered while the user is watching an in-progress timer).
+- `src/app/(main)/pill/[id].tsx` — when `activeDose` exists, the Edit Dosage Pressable is `disabled`, its accent bar and numbers render in muted tones, the row opacity drops to 0.5, and a "Locked while a timer is active." caption appears. Accessibility label switches to reflect the locked state.
+
+### Verification
+- `npx tsc --noEmit` passes clean.
+- Manual: take a scheduled pill on the dashboard — play button fires cleanly, card shows the selected timer's label (not "In blood stream" unless Clearance is the effective timer). Let a Half-Life or Duration-of-Action timer complete while Clearance is still running — card status and ring roll over to the next without any 0-state visible. One-time random pills prune at `eliminationAt` with no interaction, including on cold start.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission
