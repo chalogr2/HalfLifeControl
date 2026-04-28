@@ -5,6 +5,7 @@ import {
   addPill as fbAddPill,
   updatePill as fbUpdatePill,
   deletePill as fbDeletePill,
+  hardDeletePill as fbHardDeletePill,
   recordDose as fbRecordDose,
   updateDoseStatus as fbUpdateDoseStatus,
   initializeDashboardIfNeeded,
@@ -26,6 +27,11 @@ interface PillState {
   addPill: (userId: string, pill: Omit<Pill, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updatePill: (userId: string, pillId: string, data: Partial<Omit<Pill, 'id' | 'createdAt'>>) => Promise<void>;
   deletePill: (userId: string, pillId: string) => Promise<void>;
+  /**
+   * Hard-delete a pill (and all of its doses) from local cache + Supabase.
+   * Used for one-time tracking pills whose tracking lifecycle has ended.
+   */
+  hardDeletePill: (userId: string, pillId: string) => Promise<void>;
 
   /**
    * Synchronous in-memory update of a pill's preferred timer. Used to give the
@@ -58,6 +64,14 @@ interface PillState {
    * without waiting for a Supabase round-trip.
    */
   pruneExpiredDoses: () => void;
+
+  /**
+   * Hard-delete every "one-time tracking" (random) pill that no longer has an
+   * active dose. Random pills are meant to be ephemeral: tracking ends → row
+   * is gone. Called on cold start (after init applies cached data and after
+   * the Supabase sync lands) and on AppState foreground transitions.
+   */
+  cleanupOrphanedRandomPills: (userId: string) => Promise<void>;
 }
 
 function applyDashboard(set: (partial: Partial<PillState>) => void, data: DashboardDocument) {
@@ -70,7 +84,7 @@ function applyDashboard(set: (partial: Partial<PillState>) => void, data: Dashbo
   });
 }
 
-export const usePillStore = create<PillState>((set) => ({
+export const usePillStore = create<PillState>((set, get) => ({
   pills: [],
   activeDoses: [],
   isLoading: true,
@@ -81,14 +95,22 @@ export const usePillStore = create<PillState>((set) => ({
     // Ensure the dashboard document exists
     await initializeDashboardIfNeeded(userId);
 
-    // Load from cache (instant), then sync from Firestore in background
+    // Load from cache (instant), then sync from Supabase in background.
+    // The sync callback also re-runs the orphan cleanup so any random pill
+    // that finished while the app was closed gets wiped once the canonical
+    // server state lands.
     const cached = await loadDashboard(userId, (synced) => {
-      // Background sync callback — update store with fresh Firestore data
       applyDashboard(set, synced);
+      get().cleanupOrphanedRandomPills(userId).catch(() => {});
     });
 
     applyDashboard(set, cached);
     set({ isLoading: false });
+
+    // Cold-start sweep based on cached data. Runs immediately so the user
+    // doesn't see stale "one-time tracking" pills flash on the dashboard
+    // while the Supabase sync is still in flight.
+    get().cleanupOrphanedRandomPills(userId).catch(() => {});
   },
 
   reset: () => {
@@ -121,6 +143,12 @@ export const usePillStore = create<PillState>((set) => ({
     applyDashboard(set, dashboard);
   },
 
+  hardDeletePill: async (userId, pillId) => {
+    await cancelPillReminders(pillId).catch(() => {});
+    const dashboard = await fbHardDeletePill(userId, pillId);
+    applyDashboard(set, dashboard);
+  },
+
   recordDose: async (userId, pill, takenAt, source) => {
     const { id, dashboard } = await fbRecordDose(userId, pill, takenAt, source);
     applyDashboard(set, dashboard);
@@ -141,5 +169,32 @@ export const usePillStore = create<PillState>((set) => ({
       if (stillActive.length === state.activeDoses.length) return state;
       return { ...state, activeDoses: stillActive };
     });
+  },
+
+  cleanupOrphanedRandomPills: async (userId: string) => {
+    const { pills, activeDoses } = get();
+    const now = Date.now();
+    const orphaned = pills.filter((p) => {
+      if (p.pillType !== 'random' || !p.isActive) return false;
+      return !activeDoses.some(
+        (d) =>
+          d.pillId === p.id &&
+          d.status === 'active' &&
+          d.eliminationAt.getTime() > now,
+      );
+    });
+    if (orphaned.length === 0) return;
+    // Sequential — each fbHardDeletePill reads the dashboard cache, mutates,
+    // and writes a new copy. Parallel calls would let later writes clobber
+    // earlier ones and resurrect deleted pills in the cache.
+    for (const p of orphaned) {
+      await cancelPillReminders(p.id).catch(() => {});
+      try {
+        const dashboard = await fbHardDeletePill(userId, p.id);
+        applyDashboard(set, dashboard);
+      } catch {
+        // WAL retains the operation; next session will replay.
+      }
+    }
   },
 }));

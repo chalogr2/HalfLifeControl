@@ -409,6 +409,27 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
       break;
     }
 
+    case 'hardDeletePill': {
+      // Full removal — used for one-time tracking pills whose lifecycle has
+      // ended. Doses go first (no FK orphan window), then the pill row itself.
+      // Idempotent: if either row is already gone, the DELETE simply matches
+      // zero rows and Postgres returns success.
+      const { error: dosesError } = await supabase
+        .from('doses')
+        .delete()
+        .eq('pill_id', operation.pillId)
+        .eq('user_id', uid);
+      if (dosesError) throw dosesError;
+
+      const { error: pillError } = await supabase
+        .from('pills')
+        .delete()
+        .eq('id', operation.pillId)
+        .eq('user_id', uid);
+      if (pillError) throw pillError;
+      break;
+    }
+
     case 'removeDose': {
       // Dismiss the dose (remove from active, keep in history)
       const { error } = await supabase
@@ -542,6 +563,27 @@ export async function deletePill(uid: string, pillId: string): Promise<Dashboard
   dashboard.updatedAt = new Date();
 
   await enqueueAndAttempt(uid, { op: 'deletePill', pillId });
+  await setCachedDashboard(uid, serializeDashboard(dashboard));
+
+  return dashboard;
+}
+
+/**
+ * Hard-delete a pill and every dose attached to it. Used for one-time tracking
+ * pills whose lifecycle has ended — keeping them around (even soft-deleted)
+ * would defeat the "tracking ends → pill is gone" contract those pills carry.
+ *
+ * Removes the pill from the local cache entirely (not just `isActive: false`)
+ * and enqueues a WAL `hardDeletePill` op so the rows are wiped server-side too.
+ */
+export async function hardDeletePill(uid: string, pillId: string): Promise<DashboardDocument> {
+  const dashboard = await getCurrentDashboard(uid);
+  dashboard.pills = dashboard.pills.filter((p) => p.id !== pillId);
+  dashboard.activeDoses = dashboard.activeDoses.filter((d) => d.pillId !== pillId);
+  recomputeCounts(dashboard);
+  dashboard.updatedAt = new Date();
+
+  await enqueueAndAttempt(uid, { op: 'hardDeletePill', pillId });
   await setCachedDashboard(uid, serializeDashboard(dashboard));
 
   return dashboard;

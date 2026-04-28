@@ -153,7 +153,7 @@ export default function RegisterScreen() {
                     variant="bodyMd"
                     color="primary"
                     style={styles.bold}
-                    onPress={() => router.push({ pathname: '/legal', params: { type: 'terms' } })}
+                    onPress={() => router.push({ pathname: '/legal', params: { type: 'terms', from: 'register' } })}
                   >
                     Terms of Service
                   </Typography>
@@ -162,7 +162,7 @@ export default function RegisterScreen() {
                     variant="bodyMd"
                     color="primary"
                     style={styles.bold}
-                    onPress={() => router.push({ pathname: '/legal', params: { type: 'privacy' } })}
+                    onPress={() => router.push({ pathname: '/legal', params: { type: 'privacy', from: 'register' } })}
                   >
                     Privacy Policy
                   </Typography>

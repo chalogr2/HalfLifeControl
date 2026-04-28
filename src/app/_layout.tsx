@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import { usePillStore } from '@/stores/usePillStore';
@@ -79,6 +79,20 @@ function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
   const { isAuthenticated, isLoading, user } = useAuthStore();
+
+  // Foreground sweep: any one-time tracking pill whose dose finished while
+  // the app was backgrounded should disappear before the user sees it. Lives
+  // here (root) instead of dashboard.tsx so it runs regardless of which tab
+  // is mounted when the user comes back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      const uid = useAuthStore.getState().user?.uid;
+      if (!uid) return;
+      usePillStore.getState().cleanupOrphanedRandomPills(uid).catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;

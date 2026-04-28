@@ -19,7 +19,7 @@ interface Section {
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { pills, activeDoses, isLoading, recordDose, pruneExpiredDoses } = usePillStore();
+  const { pills, activeDoses, recordDose, pruneExpiredDoses, hardDeletePill } = usePillStore();
 
   // Schedule notifications when pills change
   useEffect(() => {
@@ -32,24 +32,40 @@ export default function DashboardScreen() {
   // the store immediately so random-tracking pills disappear without requiring
   // a tap. One-shot setTimeouts per active dose — far cheaper than a poll loop,
   // and guarantees the exact moment of expiry triggers a re-render.
+  //
+  // For one-time-tracking pills (`pillType === 'random'`) the lifecycle ends at
+  // dose elimination, so we also hard-delete the pill row + its doses here.
+  // Scheduled pills keep their soft state — only the active dose is cleared.
   useEffect(() => {
     if (activeDoses.length === 0) return;
     const now = Date.now();
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const d of activeDoses) {
       const delay = d.eliminationAt.getTime() - now;
+      const onExpire = () => {
+        pruneExpiredDoses();
+        const pill = pills.find((p) => p.id === d.pillId);
+        if (pill?.pillType === 'random' && user) {
+          hardDeletePill(user.uid, pill.id).catch(() => {});
+        }
+      };
       if (delay <= 0) {
-        // Already expired on mount — prune on next tick, don't block render.
-        timers.push(setTimeout(pruneExpiredDoses, 0));
+        timers.push(setTimeout(onExpire, 0));
       } else if (delay < 24 * 60 * 60 * 1000) {
         // Only schedule timers up to 24h out; a re-render will cover longer horizons.
-        timers.push(setTimeout(pruneExpiredDoses, delay + 250));
+        timers.push(setTimeout(onExpire, delay + 250));
       }
     }
     return () => {
       for (const t of timers) clearTimeout(t);
     };
-  }, [activeDoses, pruneExpiredDoses]);
+  }, [activeDoses, pills, user, pruneExpiredDoses, hardDeletePill]);
+
+  // Cold-start + foreground sweeps for orphaned one-time tracking pills now
+  // live in `usePillStore.cleanupOrphanedRandomPills`, kicked off from
+  // `init` (cold start) and from the AppState listener in the root layout.
+  // Keeping the logic at the data layer means it runs even when the user
+  // resumes onto a screen that isn't the dashboard.
 
   // Handle notification taps — record dose for the tapped pill
   useEffect(() => {

@@ -181,6 +181,7 @@ export type WriteOperation =
   | { op: 'addHistoryDose'; month: string; dose: string }
   | { op: 'updatePill'; pillId: string; data: string }
   | { op: 'deletePill'; pillId: string }
+  | { op: 'hardDeletePill'; pillId: string }
   | { op: 'removeDose'; doseId: string }
   | { op: 'updateHistoryDoseStatus'; month: string; doseId: string; status: string };
 

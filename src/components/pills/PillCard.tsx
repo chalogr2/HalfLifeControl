@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
+import { MarqueeText } from '@/components/ui/MarqueeText';
 import { CountdownTimer } from './CountdownTimer';
 import { describeSchedule } from '@/core/scheduling';
 import {
@@ -102,9 +103,9 @@ export function PillCard({ pill, activeDose, nextDoseLabel, onPress, onTakeDose 
                   {statusText}
                 </Typography>
               </View>
-              <Typography variant="titleLg" color="onSurface" numberOfLines={1}>
+              <MarqueeText variant="titleLg" color="onSurface">
                 {pill.drugName}
-              </Typography>
+              </MarqueeText>
               <Typography variant="bodyLg" color="onSurfaceVariant">
                 {pill.dosageMg} {pill.dosageUnit}
                 {pill.schedule ? ` · ${describeSchedule(pill.schedule)}` : ''}

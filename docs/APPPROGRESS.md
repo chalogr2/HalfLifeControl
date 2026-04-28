@@ -1050,6 +1050,57 @@ Changing `dosageMg` mid-countdown is suppressed to avoid confusing the user abou
 
 ---
 
+## Marquee Pill Names + Legal Back Nav + One-Time Pill Hard-Delete (2026-04-28)
+
+### Context
+Three follow-up issues from the previous session: long pill names were truncated on the dashboard (no marquee), Privacy Policy / Terms back buttons fell through to the dashboard instead of returning to Settings/Register, and one-time tracking pills lingered after their dose finished — including reappearing on cold start.
+
+### Marquee pill names
+Long drug names now scroll horizontally on the dashboard with industry-standard timing (1500 ms head pause → 50 px/s linear scroll → 1000 ms tail pause → ping-pong back). Short names that fit do nothing.
+
+- `src/components/ui/MarqueeText.tsx` (new) — generic single-line `<MarqueeText>` component that wraps a `Typography`. Pattern is the well-worn "wide track" trick:
+  - The container has `overflow: 'hidden'` and reports its width via `onLayout`.
+  - The inner `Animated.View` track has `flexDirection: 'row'` + `width: 10000`. Row direction is critical — it makes the inner Text size to its natural one-line content width on the main axis, instead of stretching to the 10000 cross-axis width (which had us reading 10000 for every label and "scrolling" everything).
+  - `numberOfLines={1}` on the inner Text guarantees a single line; the loose 10000-wide parent ensures the text shaper doesn't truncate, so `onLayout` reports the true natural width.
+  - Animation runs only when `textWidth > containerWidth + 1`. `Animated.sequence` with `useNativeDriver: true` keeps the scroll off the JS thread.
+- `src/components/ui/index.ts` — exports `MarqueeText`.
+- `src/components/pills/PillCard.tsx` — `pill.drugName` now renders inside `<MarqueeText variant="titleLg" color="onSurface">` instead of a static `<Typography numberOfLines={1}>`.
+
+**Why prior approaches failed (in case anyone revisits):** `flexShrink: 0` + `alignSelf: 'flex-start'` doesn't work because Yoga still propagates the parent's measured width into the text shaper as a max constraint — the line gets truncated and `onLayout` reports the truncated width. `position: 'absolute'` was unreliable on the New Architecture. The 10000-wide row container is the simplest constraint-loosener that survives Fabric.
+
+### Legal back navigation
+Privacy Policy and Terms of Service back buttons used to fall through to the dashboard because `src/app/legal.tsx` lives at the root route (parallel to `(main)` and `(auth)` so unauthenticated Register-screen users can reach it), and `router.back()` at that depth doesn't reliably pop back into a nested stack.
+
+- `src/app/legal.tsx` — accepts a `from` query param (`'settings' | 'register'`) and dispatches back via `router.replace('/(main)/(tabs)/settings')` or `'/(auth)/register'` accordingly. Falls back to `router.back()` / settings as a safety net.
+- `src/app/(main)/(tabs)/settings.tsx` — both legal links now pass `from: 'settings'`.
+- `src/app/(auth)/register.tsx` — both legal links now pass `from: 'register'`.
+
+### One-time tracking pill hard-delete
+Random ("one-time tracking") pills now disappear from the dashboard *and* from Supabase the moment their tracking ends, instead of lingering as ghosts. Two paths:
+
+**Real-time (in-session):** when an active dose's `eliminationAt` setTimeout fires on the dashboard, if the dose's pill is `pillType === 'random'`, the pill is hard-deleted (pill row + every dose row).
+
+**Cold-start + foreground sweep:** every random pill without a live active dose is treated as abandoned — either it finished while the app was closed, or the user added it but never tapped play. Sweep wipes it.
+
+- `src/services/cache/index.ts` — new WAL `WriteOperation` variant `{ op: 'hardDeletePill'; pillId }`.
+- `src/services/supabase/pills.ts`:
+  - New WAL executor case: `DELETE FROM doses WHERE pill_id = ? AND user_id = ?` then `DELETE FROM pills WHERE id = ? AND user_id = ?`. Idempotent (zero-row delete is success).
+  - New `hardDeletePill(uid, pillId)` exported function — fully removes the pill from the local cache (not just `isActive: false`) and enqueues the WAL op.
+- `src/stores/usePillStore.ts`:
+  - New `hardDeletePill` action (cancels notifications first, then calls the service).
+  - New `cleanupOrphanedRandomPills(userId)` action — filters in-memory state for `random + isActive + no live active dose`, sequentially `hardDeletePill`s each (sequential to prevent the cache rewrite race where parallel writes resurrect deleted pills).
+  - `init` now calls `cleanupOrphanedRandomPills` twice: once after applying cached data (instant), and again from the Supabase sync callback (catches anything missing from the cache but present server-side).
+- `src/app/_layout.tsx` — global `AppState.addEventListener('change', …)` in `AuthGate` calls `cleanupOrphanedRandomPills` on every `'active'` transition. Lives at the root so it runs regardless of which tab is mounted when the user resumes.
+- `src/app/(main)/(tabs)/dashboard.tsx`:
+  - Real-time prune effect now calls `hardDeletePill` for random pills on dose expiry.
+  - Removed the previous dashboard-local cold-sweep effect and AppState listener — moving cleanup into the data layer eliminated a bug where the sweep `useRef` flipped before `user` was set, blocking the sweep for the rest of the session.
+
+### Verification
+- `npx tsc --noEmit` passes clean.
+- Manual: long pill names scroll smoothly with the expected pause-scroll-pause-scroll-back rhythm; short names sit static. Privacy Policy / Terms back buttons return to the originating screen. One-time tracking pills disappear the instant their clearance timer hits zero in-session, and on cold start any orphaned random pill is wiped from cache + Supabase before the user sees the dashboard. No cache clear required.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission

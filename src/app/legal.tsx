@@ -26,15 +26,32 @@ const LEGAL_CONTENT: Record<string, { title: string; body: string }> = {
 
 export default function LegalScreen() {
   const router = useRouter();
-  const { type } = useLocalSearchParams<{ type: string }>();
+  const { type, from } = useLocalSearchParams<{ type: string; from?: string }>();
   const content = LEGAL_CONTENT[type ?? ''] ?? LEGAL_CONTENT.terms;
+
+  // legal.tsx lives at the root route (parallel to (main) and (auth)) so it's
+  // reachable from both the Register screen and Settings. router.back() at this
+  // depth can fall through to the root (dashboard) when the route stack hasn't
+  // captured the entry. Using the `from` param dispatches us back to the exact
+  // origin, which is the user's expectation.
+  const handleBack = () => {
+    if (from === 'settings') {
+      router.replace('/(main)/(tabs)/settings');
+    } else if (from === 'register') {
+      router.replace('/(auth)/register');
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(main)/(tabs)/settings');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel="Go back"
