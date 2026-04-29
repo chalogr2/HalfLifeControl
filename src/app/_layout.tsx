@@ -36,7 +36,9 @@ function useSupabaseAuthListener() {
       try {
         const session = await getSession();
         if (session) {
-          const profile = await getUserProfile(session.userId);
+          const profile = await getUserProfile(session.userId, {
+            email: session.email,
+          });
           setUser(profile);
           setSentryUser(session.userId, profile.email);
           initSubscriptions(session.userId);
@@ -53,6 +55,9 @@ function useSupabaseAuthListener() {
     const unsubscribe = onAuthChanged(async (userId) => {
       if (userId) {
         try {
+          // No fallback here: signIn/signUp already self-heal with the
+          // freshly-authenticated user data. By the time onAuthStateChange
+          // fires, the profile row is guaranteed to exist.
           const profile = await getUserProfile(userId);
           setUser(profile);
           setSentryUser(userId, profile.email);

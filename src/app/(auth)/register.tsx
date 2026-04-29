@@ -53,12 +53,14 @@ export default function RegisterScreen() {
       setUser(profile);
     } catch (err: any) {
       const code = err?.code;
-      if (code === 'auth/email-already-in-use') {
+      if (code === 'user_already_exists' || code === 'email_exists') {
         Alert.alert('Account Exists', 'An account with this email already exists. Try logging in.');
-      } else if (code === 'auth/weak-password') {
+      } else if (code === 'weak_password') {
         Alert.alert('Weak Password', 'Please use a stronger password.');
+      } else if (code === 'over_email_send_rate_limit') {
+        Alert.alert('Too Many Attempts', 'Please wait a moment and try again.');
       } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
+        Alert.alert('Sign-Up Failed', err?.message ?? 'Something went wrong. Please try again.');
       }
     } finally {
       setLoading(false);

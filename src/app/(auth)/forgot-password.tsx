@@ -36,11 +36,12 @@ export default function ForgotPasswordScreen() {
       await resetPassword(email.trim());
       setSent(true);
     } catch (err: any) {
-      if (err?.code === 'auth/user-not-found') {
-        // Don't reveal that the email doesn't exist (security)
-        setSent(true);
+      // Supabase doesn't reveal whether an email exists for password resets,
+      // so any error here is genuinely transient (network, rate limit, etc.).
+      if (err?.code === 'over_email_send_rate_limit') {
+        Alert.alert('Too Many Attempts', 'Please wait a moment and try again.');
       } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
+        Alert.alert('Error', err?.message ?? 'Something went wrong. Please try again.');
       }
     } finally {
       setLoading(false);

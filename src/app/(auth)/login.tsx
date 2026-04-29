@@ -43,12 +43,14 @@ export default function LoginScreen() {
       setUser(profile);
     } catch (err: any) {
       const code = err?.code;
-      if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      if (code === 'invalid_credentials') {
         Alert.alert('Login Failed', 'Incorrect email or password.');
-      } else if (code === 'auth/too-many-requests') {
+      } else if (code === 'email_not_confirmed') {
+        Alert.alert('Email Not Confirmed', 'Check your inbox for the confirmation link.');
+      } else if (code === 'over_request_rate_limit') {
         Alert.alert('Too Many Attempts', 'Please wait a moment and try again.');
       } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
+        Alert.alert('Login Failed', err?.message ?? 'Something went wrong. Please try again.');
       }
     } finally {
       setLoading(false);

@@ -9,13 +9,20 @@ export async function signUp(email: string, password: string): Promise<UserProfi
     password,
   });
 
-  if (error) throw new Error(error.message);
+  // Preserve the original AuthError so callers can read `.code` / `.status`.
+  // Wrapping in `new Error(error.message)` was stripping those fields and
+  // forcing every login/register failure into the catchall branch.
+  if (error) throw error;
   if (!data.user) throw new Error('Sign-up succeeded but no user returned');
 
   // The handle_new_user trigger creates the profile row automatically.
   // Wait briefly for the trigger to complete, then fetch the profile.
   // On a fresh signup the session is available immediately (email confirmation is off in dev).
-  return getUserProfile(data.user.id);
+  return getUserProfile(data.user.id, {
+    email: data.user.email ?? '',
+    displayName:
+      (data.user.user_metadata?.display_name as string | undefined) ?? null,
+  });
 }
 
 export async function signIn(email: string, password: string): Promise<UserProfile> {
@@ -24,10 +31,14 @@ export async function signIn(email: string, password: string): Promise<UserProfi
     password,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) throw error;
   if (!data.user) throw new Error('Sign-in succeeded but no user returned');
 
-  return getUserProfile(data.user.id);
+  return getUserProfile(data.user.id, {
+    email: data.user.email ?? '',
+    displayName:
+      (data.user.user_metadata?.display_name as string | undefined) ?? null,
+  });
 }
 
 export async function signOut(): Promise<void> {
@@ -45,17 +56,56 @@ export async function signOut(): Promise<void> {
 
 export async function resetPassword(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw new Error(error.message);
+  if (error) throw error;
 }
 
-export async function getUserProfile(uid: string): Promise<UserProfile> {
-  const { data, error } = await supabase
+interface ProfileFallback {
+  email: string;
+  displayName?: string | null;
+}
+
+/**
+ * Fetch the user's profile row. If it's missing (predates the
+ * handle_new_user trigger, or was manually deleted) and a `fallback` is
+ * supplied, recreate it. Without a fallback, missing rows surface as an
+ * error.
+ *
+ * Pass the fallback from the caller's auth-user data (signIn / signUp /
+ * cold-start session). We don't call supabase.auth.getUser() here because
+ * it makes a network round-trip that can fail with "Auth session missing"
+ * even moments after a successful sign-in.
+ */
+export async function getUserProfile(
+  uid: string,
+  fallback?: ProfileFallback,
+): Promise<UserProfile> {
+  // .maybeSingle() returns null for 0 rows instead of erroring — lets us
+  // detect a missing profile row and self-heal below.
+  let { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', uid)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) throw new Error(error?.message ?? 'User profile not found');
+  if (error) throw error;
+
+  if (!data) {
+    if (!fallback) throw new Error('User profile not found');
+
+    // RLS allows the owner to insert their own profile (auth.uid() = id).
+    const insert = await supabase
+      .from('profiles')
+      .insert({
+        id: uid,
+        email: fallback.email,
+        display_name: fallback.displayName ?? null,
+      })
+      .select('*')
+      .single();
+
+    if (insert.error) throw insert.error;
+    data = insert.data;
+  }
 
   return {
     uid: data.id,

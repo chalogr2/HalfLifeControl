@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureSessionStorage, userMetadataStorage } from './sessionStorage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,9 +11,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// The Supabase session is split across two stores so that the high-value
+// items (refresh + access tokens, PKCE code-verifier) live in
+// hardware-backed secure storage, while the larger user-metadata object
+// stays in AsyncStorage. See `sessionStorage.ts` for the rationale.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: secureSessionStorage,
+    userStorage: userMetadataStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
