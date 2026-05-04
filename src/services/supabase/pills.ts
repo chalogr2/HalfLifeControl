@@ -260,7 +260,14 @@ export async function loadDashboard(
       const stillPending = await hasPendingWrites(uid);
       if (stillPending) return;
 
-      // Housekeeping: prune expired active doses
+      // Server-side completion of expired doses (compute against the
+      // pre-prune array — the local filter strips them out a few lines
+      // below). For random pills the orphan-cleanup in usePillStore will
+      // hard-delete the pill+dose afterwards; marking the dose 'completed'
+      // first is harmless because the DELETE wins regardless.
+      await completeExpiredDosesOnServer(uid, remote.activeDoses);
+
+      // Housekeeping: prune expired active doses (local cache + in-memory)
       const now = new Date();
       remote.activeDoses = remote.activeDoses.filter(
         (d) => d.eliminationAt > now && d.status === 'active',
@@ -277,6 +284,42 @@ export async function loadDashboard(
   })();
 
   return cached ?? emptyDashboard();
+}
+
+/**
+ * Mark expired active doses as completed in Supabase.
+ *
+ * Without this, doses for scheduled pills sit in `public.doses` with
+ * `status='active'` indefinitely after their `elimination_at` passes. The
+ * local cache strips them out on every sync, but the server never learns —
+ * which makes the active-doses query grow monotonically and lets old
+ * "active" doses leak into history views on a fresh device that hasn't
+ * rebuilt the cache yet.
+ *
+ * The `eq('status', 'active')` predicate keeps the UPDATE idempotent:
+ *   - Already-dismissed / already-completed rows are untouched.
+ *   - A concurrent session that flips a dose to `dismissed` first wins by
+ *     virtue of the WHERE clause matching zero rows on our retry.
+ *
+ * Errors are captured but not thrown — the local prune still runs, so a
+ * transient failure just means we'll retry on the next sync.
+ */
+async function completeExpiredDosesOnServer(uid: string, doses: Dose[]): Promise<void> {
+  const now = Date.now();
+  const expiredIds = doses
+    .filter((d) => d.status === 'active' && d.eliminationAt.getTime() <= now)
+    .map((d) => d.id);
+
+  if (expiredIds.length === 0) return;
+
+  const { error } = await supabase
+    .from('doses')
+    .update({ status: 'completed' })
+    .eq('user_id', uid)
+    .eq('status', 'active')
+    .in('id', expiredIds);
+
+  if (error) captureException(error);
 }
 
 /**

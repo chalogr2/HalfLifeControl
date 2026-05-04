@@ -111,6 +111,21 @@ export default function AddPillScreen() {
       return;
     }
 
+    // Without at least one day, nextScheduledDose() silently degrades to daily
+    // while the notification scheduler creates zero reminders — same data row,
+    // two different effective schedules. Block at the entry point.
+    if (
+      effectivePillType === 'scheduled' &&
+      frequency === 'specific_days' &&
+      daysOfWeek.length === 0
+    ) {
+      Alert.alert(
+        'Pick at least one day',
+        'Select which days of the week you take this medication.',
+      );
+      return;
+    }
+
     // Free tier gate: check limits by pill type
     const isScheduled = effectivePillType === 'scheduled';
     if (isScheduled && !canAddScheduledPill(scheduledCount)) {

@@ -2,7 +2,7 @@
 
 This document is the authoritative plan for moving HalfLifeControl's backend from Firebase (Auth + Firestore + Cloud Functions + FCM) to Supabase (Postgres + Auth + RLS). It covers the *why*, the *what*, everything the developer has to do manually, and a step-by-step Supabase setup that anyone can follow without prior experience.
 
-**Status**: Planning complete, awaiting developer's `go` command to begin code changes. The existing Firebase data (a single debug user) will be wiped; no migration script is needed.
+**Status**: Migration completed in April 2026. The Firebase code, `functions/`, `firestore.rules`, and `firestore.indexes.json` have all been removed; the app now runs end-to-end against Supabase. This document is retained as a historical reference for *why* the move happened and *what* the resulting schema/architecture looks like. The remaining future-tense wording below ("the assistant will…", "will land in…") describes the original plan and was left intact intentionally — every action it describes has since been carried out.
 
 ---
 

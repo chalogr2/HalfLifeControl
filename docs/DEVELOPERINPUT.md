@@ -2,7 +2,7 @@
 
 Everything in this document requires **your personal action** — creating accounts, entering secrets, reviewing content, or making decisions that code agents cannot do for you. Items are grouped by urgency.
 
-> **Backend migration in progress (2026-04)**: HalfLifeControl is moving from Firebase to Supabase. Backend setup is now covered end-to-end in **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)**. Items 1–4 below have been rewritten to point at that guide. Everything else in this document (drug DB review, legal content, icons, EAS login, RevenueCat, Sentry, etc.) is unchanged.
+> **Backend migration complete (2026-04)**: HalfLifeControl now runs on Supabase. The Firebase SDK, `functions/`, `firestore.rules`, and `firestore.indexes.json` have all been removed. **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)** is retained as a historical reference. Items 1–4 below have been rewritten around the new backend; everything else in this document (drug DB review, legal content, icons, EAS login, RevenueCat, Sentry, etc.) is unchanged.
 
 ---
 
@@ -25,9 +25,9 @@ EXPO_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ... (the "anon public" key, NOT service_role)
 ```
 
-The assistant will paste these into `.env` and wire them through `src/services/supabase/config.ts` once the code migration begins.
+These values are read by `src/services/supabase/config.ts` and must be present in `.env` for the app to start.
 
-**File that will read these (after migration)**: `src/services/supabase/config.ts`
+**File that reads these**: `src/services/supabase/config.ts`
 
 **Status**: [ ] Supabase project created / [ ] Schema applied / [ ] RLS verified / [ ] Env values collected
 
@@ -118,7 +118,7 @@ npx eas-cli login
 
 ### 9. ~~Onboarding completion is never set to `true`~~ — FIXED (Phase 5)
 
-**Fixed in**: `src/services/firebase/auth.ts` (added `completeOnboarding()`) and `src/app/(main)/pill/add.tsx` (calls it after first pill saved).
+**Fixed in**: `src/services/supabase/auth.ts` (added `completeOnboarding()`) and `src/app/(main)/pill/add.tsx` (calls it after first pill saved). Originally landed in the Firebase service module; carried over to Supabase during the April 2026 migration.
 
 **Status**: [x] Fixed in Phase 5
 
@@ -140,7 +140,7 @@ Navigation is wired up — both Settings and Register screens now open `src/app/
 
 ### 11. ~~Settings reminder preference is not persisted~~ — FIXED (Phase 5)
 
-**Fixed in**: `src/services/firebase/auth.ts` (added `updateUserSettings()`) and `src/app/(main)/(tabs)/settings.tsx` (calls it on reminder mode change).
+**Fixed in**: `src/services/supabase/auth.ts` (added `updateUserSettings()`) and `src/app/(main)/(tabs)/settings.tsx` (calls it on reminder mode change). Originally landed in the Firebase service module; carried over to Supabase during the April 2026 migration.
 
 **Status**: [x] Fixed in Phase 5
 
@@ -200,19 +200,19 @@ Code is built and gracefully degrades without API keys. You need to set up Reven
 
 ---
 
-### Phase 6: Google Sign-In + Sentry + Android Build — Code complete, needs account setup
+### Phase 6: Google Sign-In + Sentry + Android Build — partially complete
 
-Google Sign-In code is built. Apple Sign-In is deferred to Phase 7 (no Mac). Sentry service gracefully degrades when DSN not set.
+Sentry service code is built and gracefully degrades when DSN is not set. The original Firebase-based Google Sign-In was removed during the Supabase migration; a Supabase-OAuth replacement has not been built yet. Apple Sign-In is deferred to Phase 7 (no Mac).
 
-#### 13. (Deferred) Google Sign-In — will be re-wired post-migration
+#### 15. Google Sign-In via Supabase OAuth (not yet implemented)
 
-Google Sign-In is deferred to a follow-up after the Supabase migration is complete. Supabase supports Google OAuth natively; the setup will be different from the old Firebase flow. No action needed now.
+The old Firebase Google Sign-In code (`src/services/firebase/googleAuth.ts`) was deleted during the April 2026 migration. Supabase supports Google OAuth natively, but the React Native flow is different from the old Firebase one — it requires deep-link configuration, redirect URI verification on physical devices, and session-restoration handling. This is tracked as a post-migration follow-up.
 
-**Status**: [ ] Deferred to post-migration follow-up
+**Status**: [ ] Not yet implemented (post-migration follow-up)
 
 ---
 
-#### 14. (Removed) `google-services.json` no longer required
+#### 16. (Removed) `google-services.json` no longer required
 
 Supabase does not require `google-services.json`. The old Firebase Android config file can be deleted if it still exists in the project root.
 
@@ -220,7 +220,7 @@ Supabase does not require `google-services.json`. The old Firebase Android confi
 
 ---
 
-#### 15. Create Sentry project
+#### 17. Create Sentry project
 
 1. Create a free account at **sentry.io**
 2. Create a **React Native** project
@@ -234,7 +234,7 @@ Supabase does not require `google-services.json`. The old Firebase Android confi
 
 ---
 
-#### 16. App Icon Assets (REQUIRED for build)
+#### 18. App Icon Assets (REQUIRED for build)
 
 The `app.json` references these icon files. The build will fail if they don't exist:
 
@@ -253,9 +253,9 @@ The `app.json` references these icon files. The build will fail if they don't ex
 
 ---
 
-#### 17. Build and Run on Android Emulator
+#### 19. Build and Run on Android Emulator
 
-**Prerequisites** (complete items 1, 13, 14, 16 above first):
+**Prerequisites** (complete the Supabase env setup, the Sentry DSN if you want crash reporting, and the App Icon Assets above first):
 
 1. **Install Android Studio** + create an AVD (Android Virtual Device):
    - Recommended: Pixel 7 or similar, API 34+
