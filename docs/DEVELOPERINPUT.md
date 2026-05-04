@@ -158,11 +158,21 @@ Navigation is wired up — both Settings and Register screens now open `src/app/
 
 ### 13. ~~AsyncStorage stores medication data in plaintext~~ — FIXED
 
-All PHI (medication data) in the local cache and WAL is now AES-256-GCM encrypted before writing to AsyncStorage. The encryption key is generated once per device and stored in `expo-secure-store` (hardware-backed iOS Keychain / Android Keystore). Non-PHI metadata (lastSync timestamp) remains unencrypted.
+Three layers of at-rest encryption now cover every sensitive on-device value:
 
-**Migration**: Legacy unencrypted values are detected by checking if the stored string starts with `{` or `[` (valid JSON). On first read, they are transparently re-encrypted in place. No manual migration step needed.
+| What | Where it lives | How it's protected |
+|---|---|---|
+| Medication cache + write-ahead log (PHI) | AsyncStorage | AES-256-GCM via `src/services/secureStorage.ts`; key in expo-secure-store |
+| Supabase access + refresh tokens, PKCE code-verifier | iOS Keychain / Android Keystore | Hardware-backed via expo-secure-store directly (no JS crypto layer in the path) |
+| Supabase user metadata blob (email, auth metadata) | AsyncStorage | AES-256-GCM via the same `secureStorage.ts` helpers, plumbed through Supabase's `userStorage` adapter in `src/services/supabase/sessionStorage.ts` |
 
-**Status**: [x] Implemented
+Only non-sensitive metadata (the `lastSync` timestamp) remains unencrypted.
+
+**Migration**: Legacy unencrypted values are detected by checking if the stored string starts with `{` or `[` (valid JSON). On first read, they are transparently re-encrypted in place. No sign-out, no manual migration step.
+
+**Known limitation — corruption-while-offline edge case**: if the encrypted user blob ever becomes unreadable (key drift, format change, file-system damage) **and** the user is offline at the same time, the proxy-recovery path in `auth.ts`'s `resolveSessionUser` cannot reach `/auth/v1/user` and returns null. The app behaves as if the session is missing and routes the user to the login screen, even though the access token in SecureStore is still valid. Tokens are not invalidated — the next launch with network restored will recover transparently, and the user's cached pills/history are preserved on disk. The proper fix is to fall back to a local JWT decode of the access token's `sub` claim as a last-resort source of truth for the user ID; deferred until production telemetry shows it actually firing.
+
+**Status**: [x] Implemented (with the known offline-corruption limitation above)
 
 ---
 

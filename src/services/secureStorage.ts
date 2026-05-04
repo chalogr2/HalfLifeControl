@@ -8,7 +8,9 @@
  *
  * Used by:
  *   - cache/index.ts for PHI (medication data, write-ahead log)
- *   - supabase/config.ts for the Supabase auth session (refresh + access tokens)
+ *   - supabase/sessionStorage.ts for the Supabase user metadata blob
+ *     (email + auth metadata; tokens themselves go to SecureStore directly,
+ *     not through this layer)
  *
  * Migration: legacy plaintext values written by older builds are detected on
  * read (they begin with `{` or `[` because they're JSON), encrypted in place,
