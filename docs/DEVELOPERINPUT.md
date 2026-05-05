@@ -4,6 +4,8 @@ Everything in this document requires **your personal action** — creating accou
 
 > **Backend migration complete (2026-04)**: HalfLifeControl now runs on Supabase. The Firebase SDK, `functions/`, `firestore.rules`, and `firestore.indexes.json` have all been removed. **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)** is retained as a historical reference. Items 1–4 below have been rewritten around the new backend; everything else in this document (drug DB review, legal content, icons, EAS login, RevenueCat, Sentry, etc.) is unchanged.
 
+> **Final polish queue (deferred to end of development)**: items **8** (drug database half-life values + pill search refinement) and **10** (Terms of Service / Privacy Policy copy + openFDA third-party transmission disclosure) are deliberately held until the final polish pass after Phases 4–7 land. They are user-facing correctness/legal items whose final shape depends on the full feature set being frozen — touching them mid-development would force re-validation after every feature shift. Do not start them until prompted.
+
 ---
 
 ## BLOCKING: Required Before the App Can Run
@@ -103,16 +105,19 @@ npx eas-cli login
 
 ## NEEDS HUMAN REVIEW
 
-### 8. Drug database half-life values
+### 8. Drug database + pill search refinement — deferred to FINAL POLISH
 
-`src/data/drugDatabase.ts` contains 50 drugs with half-life data sourced from clinical pharmacology references. These values are used to calculate countdown timers — the core feature of the app.
+> **Scheduling note**: This item is intentionally held until the final polish pass at the end of development, alongside item 10 (legal content). Half-life values and the drug-search experience are user-facing correctness/quality concerns that benefit from being tuned with the rest of the app stable around them, rather than mid-development when they would have to be re-validated after every feature shift.
 
-**Action**: Review the half-life values for medical accuracy. Key drugs to double-check:
+**Pill data**: `src/data/drugDatabase.ts` contains 50 drugs with half-life data sourced from clinical pharmacology references. These values feed the countdown timers — the core feature of the app. Review for medical accuracy. Known cases to double-check:
 - Aspirin: uses parent compound half-life (20min), not salicylate metabolite (2-4.5h)
 - Fluoxetine: 5760min (4 days) — correct but the active metabolite norfluoxetine is 4-16 days
 - Levothyroxine: 10080min (7 days) — very long, users may find the 5-half-life countdown (35 days) surprising
+- Duration-of-action multipliers in `src/core/halflife.ts` use a fixed factor; per-drug values from PubMed/FDA are pending (see `duration-research.md`).
 
-**Status**: [ ] Reviewed and approved
+**Pill search**: The 3-tier search (curated DB → openFDA → manual) in `src/components/pills/DrugSearchBar.tsx` works end-to-end but has not been polished. Final-polish items include: typeahead latency tuning, deduplication of curated/openFDA hits with the same generic name, ranking the active ingredient ahead of brand suffixes, and copy on the manual-entry path. The openFDA third-party-transmission disclosure is owned by item 10 (Privacy Policy), not here.
+
+**Status**: [ ] Deferred to final polish phase (do not start until feature work in Phases 4–7 is complete)
 
 ---
 
@@ -124,17 +129,17 @@ npx eas-cli login
 
 ---
 
-### 10. Legal pages need content
+### 10. Legal pages content + openFDA third-party disclosure — deferred to FINAL POLISH
 
-Navigation is wired up — both Settings and Register screens now open `src/app/legal.tsx` with the correct `type` param ("terms" or "privacy"). The screen lives at the root route level so it's accessible to both authenticated and unauthenticated users. Placeholder text is shown.
+> **Scheduling note**: Held intentionally until the final polish pass at the end of development. The Privacy Policy can only be finalized once the full set of network egress points and at-rest data flows is frozen, so writing it now would just create churn. Navigation is already wired up; only the copy and the openFDA gating remain.
 
-**Action**: You need to write (or have a lawyer draft) your actual Terms of Service and Privacy Policy. Replace the placeholder text in `src/app/legal.tsx` (the `LEGAL_CONTENT` object).
-
-**Stitch mockups exist** at:
+**Legal copy**: Both Settings and Register screens open `src/app/legal.tsx` with the correct `type` param ("terms" or "privacy"). The screen lives at the root route level so it's accessible to both authenticated and unauthenticated users. The placeholder text in the `LEGAL_CONTENT` object must be replaced with real Terms of Service and Privacy Policy text (drafted by a lawyer, or templated from a generator and reviewed). Stitch mockups exist at:
 - `docs/stitch_halflifecontrol_html/terms_of_service/`
 - `docs/stitch_halflifecontrol_html/privacy_policy/`
 
-**Status**: [x] Screens wired up / [ ] Legal content drafted
+**openFDA third-party transmission**: The drug search in `src/services/openfda/index.ts` sends the user's typed search term to `api.fda.gov` (a US Government endpoint) over HTTPS on every typeahead query of ≥3 chars. The Privacy Policy must disclose this third-party transmission, and the app must either (a) gate the openFDA tier behind a one-time consent prompt, or (b) move the lookups behind our own Supabase Edge Function proxy so only an opaque server-side identifier is exposed. Decision and implementation are part of this same final-polish item — they cannot be split because the Privacy Policy text depends on which path is chosen.
+
+**Status**: [x] Screens wired up / [ ] Deferred to final polish phase (legal copy + openFDA disclosure decision pending)
 
 ---
 
