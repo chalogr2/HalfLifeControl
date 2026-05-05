@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[24],
+    paddingBottom: spacing[8],
   },
   header: {
     flexDirection: 'row',

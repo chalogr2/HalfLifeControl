@@ -52,7 +52,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Typography variant="headlineMd" color="primary" style={styles.title}>Settings</Typography>
+        <Typography variant="headlineLg" color="primary" style={styles.title}>Settings</Typography>
 
         {/* Reminders section */}
         <Typography variant="titleMd" color="primary" style={styles.sectionTitle}>Reminders</Typography>
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[24],
+    paddingBottom: spacing[20],
   },
   title: {
     paddingTop: spacing[2],

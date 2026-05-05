@@ -154,7 +154,7 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Typography variant="headlineMd" color="primary">Dashboard</Typography>
+        <Typography variant="headlineLg" color="primary">Dashboard</Typography>
         <Pressable
           style={styles.avatar}
           accessibilityRole="button"
@@ -171,9 +171,12 @@ export default function DashboardScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderPill}
         renderSectionHeader={({ section }) => (
-          <Typography variant="titleLg" color="primary" style={styles.sectionHeader}>
-            {section.title}
-          </Typography>
+          <View style={styles.sectionHeader}>
+            <Typography variant="titleLg" color="primary">
+              {section.title}
+            </Typography>
+            <View style={styles.sectionHeaderLine} />
+          </View>
         )}
         renderSectionFooter={({ section }) =>
           section.title === 'My Daily Stack' ? (
@@ -219,7 +222,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing[6],
     paddingTop: spacing[2],
-    paddingBottom: spacing[4],
+    paddingBottom: 0,
   },
   avatar: {
     width: 40,
@@ -231,19 +234,27 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[24],
+    paddingBottom: spacing[20],
   },
   sectionHeader: {
-    marginTop: spacing[5],
-    marginBottom: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    marginTop: spacing[6],
+    marginBottom: spacing[6],
+  },
+  sectionHeaderLine: {
+    flex: 1,
+    height: 1.5,
+    backgroundColor: colors.surfaceContainerHigh,
   },
   separator: {
-    height: spacing[3],
+    height: spacing[4],
   },
   addToStack: {
     alignItems: 'center',
     paddingVertical: spacing[4],
-    marginTop: spacing[3],
+    marginTop: spacing[4],
     borderRadius: borderRadius.xl,
     borderWidth: 1.5,
     borderStyle: 'dashed',
