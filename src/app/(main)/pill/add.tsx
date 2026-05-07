@@ -15,6 +15,7 @@ import type { PillType, ScheduleFrequency, DurationType, TimerType } from '@/cor
 const FREQUENCY_OPTIONS: { label: string; value: ScheduleFrequency | 'as_needed' }[] = [
   { label: 'Every day', value: 'daily' },
   { label: 'Specific days', value: 'specific_days' },
+  { label: 'Every N days', value: 'every_n_days' },
   { label: 'As needed', value: 'as_needed' },
 ];
 
@@ -57,6 +58,7 @@ export default function AddPillScreen() {
   const [frequency, setFrequency] = useState<ScheduleFrequency | 'as_needed'>('daily');
   const [timeOfDay, setTimeOfDay] = useState('08:00');
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
+  const [intervalDays, setIntervalDays] = useState<string>('2');
   const [selectedColor, setSelectedColor] = useState<string>(PILL_COLORS[0]);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -126,6 +128,19 @@ export default function AddPillScreen() {
       return;
     }
 
+    const parsedIntervalDays = parseInt(intervalDays, 10);
+    if (
+      effectivePillType === 'scheduled' &&
+      frequency === 'every_n_days' &&
+      (!Number.isFinite(parsedIntervalDays) || parsedIntervalDays < 1)
+    ) {
+      Alert.alert(
+        'Pick an interval',
+        'Enter a whole number of days (1 or more) between doses.',
+      );
+      return;
+    }
+
     // Free tier gate: check limits by pill type
     const isScheduled = effectivePillType === 'scheduled';
     if (isScheduled && !canAddScheduledPill(scheduledCount)) {
@@ -144,6 +159,7 @@ export default function AddPillScreen() {
             timeOfDay,
             frequency: frequency as ScheduleFrequency,
             ...(frequency === 'specific_days' ? { daysOfWeek } : {}),
+            ...(frequency === 'every_n_days' ? { intervalDays: parsedIntervalDays } : {}),
           }
         : null;
 
@@ -337,6 +353,29 @@ export default function AddPillScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {/* Interval input for every-N-days */}
+            {frequency === 'every_n_days' && (
+              <>
+                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+                  Take every
+                </Typography>
+                <View style={styles.row}>
+                  <View style={{ flex: 2 }}>
+                    <Input
+                      label=""
+                      placeholder="2"
+                      value={intervalDays}
+                      onChangeText={setIntervalDays}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1, justifyContent: 'center' }}>
+                    <Typography variant="bodyLg" color="onSurfaceVariant">days</Typography>
+                  </View>
+                </View>
+              </>
+            )}
 
             {/* Day picker for specific days */}
             {frequency === 'specific_days' && (

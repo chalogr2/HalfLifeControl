@@ -78,6 +78,57 @@ function nextIntervalDose(hours: number, minutes: number, intervalDays: number, 
   return today;
 }
 
+/**
+ * Most recent past Date this schedule should have fired before `now`.
+ *
+ * Returns null for `every_n_days` schedules: without a stored "cycle anchor"
+ * date on the pill, we can't tell which cycle we're in, so auto-assume
+ * reconciliation is intentionally a no-op for that frequency. Daily +
+ * specific-days callers always get a real Date.
+ */
+export function previousScheduledDose(schedule: PillSchedule, now: Date = new Date()): Date | null {
+  const { hours, minutes } = parseTime(schedule.timeOfDay);
+
+  if (schedule.frequency === 'daily') {
+    return previousDailyDose(hours, minutes, now);
+  }
+
+  if (schedule.frequency === 'specific_days' && schedule.daysOfWeek?.length) {
+    return previousSpecificDayDose(hours, minutes, schedule.daysOfWeek, now);
+  }
+
+  if (schedule.frequency === 'every_n_days') {
+    return null;
+  }
+
+  return previousDailyDose(hours, minutes, now);
+}
+
+function previousDailyDose(hours: number, minutes: number, now: Date): Date {
+  const today = new Date(now);
+  today.setHours(hours, minutes, 0, 0);
+  if (today.getTime() <= now.getTime()) return today;
+  today.setDate(today.getDate() - 1);
+  return today;
+}
+
+function previousSpecificDayDose(hours: number, minutes: number, daysOfWeek: number[], now: Date): Date {
+  // Walk back day-by-day up to a full week and pick the first match whose
+  // time-of-day has already passed. Bounded loop — never spins.
+  for (let offset = 0; offset < 8; offset++) {
+    const candidate = new Date(now);
+    candidate.setDate(candidate.getDate() - offset);
+    candidate.setHours(hours, minutes, 0, 0);
+    if (candidate.getTime() > now.getTime()) continue;
+    if (daysOfWeek.includes(candidate.getDay())) return candidate;
+  }
+  // Should be unreachable for non-empty daysOfWeek; safety fallback.
+  const fallback = new Date(now);
+  fallback.setDate(fallback.getDate() - 7);
+  fallback.setHours(hours, minutes, 0, 0);
+  return fallback;
+}
+
 /** Human-friendly schedule description. */
 export function describeSchedule(schedule: PillSchedule): string {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

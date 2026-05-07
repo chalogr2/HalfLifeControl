@@ -21,12 +21,12 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
   const { pills, activeDoses, recordDose, pruneExpiredDoses, hardDeletePill } = usePillStore();
 
-  // Schedule notifications when pills change
+  // Schedule notifications when pills change. Always run (not gated on
+  // pills.length > 0) so that removing the last pill also cleans up its
+  // pending reminder.
   useEffect(() => {
-    if (pills.length > 0) {
-      scheduleAllPillReminders(pills);
-    }
-  }, [pills]);
+    scheduleAllPillReminders(pills, user?.settings);
+  }, [pills, user?.settings]);
 
   // Real-time pruning: when an active dose's eliminationAt passes, drop it from
   // the store immediately so random-tracking pills disappear without requiring
@@ -67,12 +67,17 @@ export default function DashboardScreen() {
   // Keeping the logic at the data layer means it runs even when the user
   // resumes onto a screen that isn't the dashboard.
 
-  // Handle notification taps — record dose for the tapped pill
+  // Handle notification taps. "Took it" action records doses for every pill
+  // in the (possibly grouped) reminder. Default tap also records — the
+  // notification is itself the prompt; tapping it is acknowledgement.
+  // Snooze is handled internally by the notifications service and does not
+  // bubble up here.
   useEffect(() => {
-    const cleanup = setNotificationResponseHandler((pillId) => {
-      const pill = pills.find((p) => p.id === pillId);
-      if (pill && user) {
-        handleTakePill(pill);
+    const cleanup = setNotificationResponseHandler((pillIds) => {
+      if (!user || pillIds.length === 0) return;
+      for (const id of pillIds) {
+        const pill = pills.find((p) => p.id === id);
+        if (pill) handleTakePill(pill);
       }
     });
     return cleanup;

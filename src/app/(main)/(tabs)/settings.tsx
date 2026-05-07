@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Card } from '@/components/ui';
@@ -34,12 +34,25 @@ export default function SettingsScreen() {
   const [reminderMode, setReminderMode] = React.useState<ReminderMode>(
     (user?.settings?.reminderMode as ReminderMode) ?? 'auto_start',
   );
+  const [autoAssumeTaken, setAutoAssumeTaken] = React.useState<boolean>(
+    user?.settings?.autoAssumeTaken ?? false,
+  );
 
   const handleReminderChange = useCallback((mode: ReminderMode) => {
     setReminderMode(mode);
     if (user) {
       updateUserSettings(user.uid, { ...user.settings, reminderMode: mode });
     }
+  }, [user]);
+
+  const handleAutoAssumeToggle = useCallback((value: boolean) => {
+    setAutoAssumeTaken(value);
+    if (!user) return;
+    const nextSettings = { ...user.settings, autoAssumeTaken: value };
+    // Optimistic local-store update so dependent effects (notifications
+    // scheduler, reconcile) pick it up before the Supabase write returns.
+    useAuthStore.getState().setUser({ ...user, settings: nextSettings });
+    updateUserSettings(user.uid, nextSettings);
   }, [user]);
 
   const handleSignOut = useCallback(() => {
@@ -94,6 +107,25 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Auto-assume taken */}
+        <Card variant="elevated" style={styles.autoAssumeCard}>
+          <View style={styles.autoAssumeRow}>
+            <View style={styles.autoAssumeContent}>
+              <Typography variant="titleMd" color="onSurface">
+                Auto-assume taken
+              </Typography>
+              <Typography variant="bodyLg" color="onSurfaceVariant">
+                Skip notifications and automatically record doses at scheduled times. Background recording while the app is closed is coming in a future update.
+              </Typography>
+            </View>
+            <Switch
+              value={autoAssumeTaken}
+              onValueChange={handleAutoAssumeToggle}
+              accessibilityLabel="Auto-assume taken"
+            />
+          </View>
+        </Card>
 
         {/* Subscription */}
         {tier === 'free' ? (
@@ -186,7 +218,21 @@ const styles = StyleSheet.create({
   },
   reminderOptions: {
     gap: spacing[3],
+    marginBottom: spacing[4],
+  },
+  autoAssumeCard: {
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[4],
     marginBottom: spacing[8],
+  },
+  autoAssumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  autoAssumeContent: {
+    flex: 1,
+    gap: spacing[1],
   },
   reminderCard: {
     paddingVertical: spacing[4],

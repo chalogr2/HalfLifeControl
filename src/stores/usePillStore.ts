@@ -11,6 +11,8 @@ import {
   initializeDashboardIfNeeded,
 } from '@/services/supabase/pills';
 import { cancelPillReminders } from '@/services/notifications';
+import { previousScheduledDose } from '@/core/scheduling';
+import { useAuthStore } from '@/stores/useAuthStore';
 
 interface PillState {
   pills: Pill[];
@@ -55,8 +57,18 @@ interface PillState {
     >,
     takenAt: Date,
     source: DoseSource,
+    scheduledFor?: Date | null,
   ) => Promise<string>;
   dismissDose: (userId: string, doseId: string) => Promise<void>;
+
+  /**
+   * Walk every active scheduled pill and write an auto dose for the most
+   * recent past scheduled time, if one isn't already on record. Used by the
+   * autoAssumeTaken setting — runs on dashboard mount and on AppState
+   * foreground transitions. No-op for `every_n_days` schedules (see
+   * `previousScheduledDose` rationale).
+   */
+  reconcileAutoAssumedDoses: (userId: string) => Promise<void>;
 
   /**
    * Local-only: drop active doses whose eliminationAt has passed. Lets the
@@ -111,6 +123,10 @@ export const usePillStore = create<PillState>((set, get) => ({
     // doesn't see stale "one-time tracking" pills flash on the dashboard
     // while the Supabase sync is still in flight.
     get().cleanupOrphanedRandomPills(userId).catch(() => {});
+    // Auto-assume reconcile is a no-op when the setting is off; safe to
+    // always invoke. Catches doses that "should have happened" while the
+    // app was closed for users who opted in.
+    get().reconcileAutoAssumedDoses(userId).catch(() => {});
   },
 
   reset: () => {
@@ -149,8 +165,8 @@ export const usePillStore = create<PillState>((set, get) => ({
     applyDashboard(set, dashboard);
   },
 
-  recordDose: async (userId, pill, takenAt, source) => {
-    const { id, dashboard } = await fbRecordDose(userId, pill, takenAt, source);
+  recordDose: async (userId, pill, takenAt, source, scheduledFor) => {
+    const { id, dashboard } = await fbRecordDose(userId, pill, takenAt, source, scheduledFor);
     applyDashboard(set, dashboard);
     return id;
   },
@@ -169,6 +185,40 @@ export const usePillStore = create<PillState>((set, get) => ({
       if (stillActive.length === state.activeDoses.length) return state;
       return { ...state, activeDoses: stillActive };
     });
+  },
+
+  reconcileAutoAssumedDoses: async (userId: string) => {
+    const settings = useAuthStore.getState().user?.settings;
+    if (!settings?.autoAssumeTaken) return;
+
+    const { pills, activeDoses } = get();
+    const now = new Date();
+    const cutoff = now.getTime() - 24 * 60 * 60 * 1000;
+
+    for (const pill of pills) {
+      if (pill.pillType !== 'scheduled' || !pill.isActive || !pill.schedule) continue;
+
+      const prev = previousScheduledDose(pill.schedule, now);
+      if (!prev) continue;
+      if (prev.getTime() < cutoff) continue;
+
+      // Skip if the user (or a prior reconcile pass) already has any active
+      // dose for this pill at-or-after the most recent scheduled time. This
+      // covers both the manual-take-around-scheduled-time case and the
+      // already-reconciled case in a single check.
+      const alreadyCovered = activeDoses.some(
+        (d) => d.pillId === pill.id && d.takenAt.getTime() >= prev.getTime(),
+      );
+      if (alreadyCovered) continue;
+
+      try {
+        const { id, dashboard } = await fbRecordDose(userId, pill, prev, 'auto', prev);
+        void id;
+        applyDashboard(set, dashboard);
+      } catch {
+        // WAL retains the operation; next session will replay.
+      }
+    }
   },
 
   cleanupOrphanedRandomPills: async (userId: string) => {

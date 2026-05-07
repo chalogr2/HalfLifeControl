@@ -181,19 +181,18 @@ Only non-sensitive metadata (the `lastSync` timestamp) remains unencrypted.
 
 ---
 
-### 14. Remaining notification/scheduling feature gaps
+### 14. Remaining notification/scheduling feature gaps — Phase 4 closeout COMPLETE (with one deferred piece)
 
-The following features from the GAMEPLAN spec are not yet implemented. These are **feature additions**, not bugs in existing functionality:
+| Feature | Status |
+|---------|--------|
+| `every_n_days` frequency in add-pill UI | [x] Done — `src/app/(main)/pill/add.tsx` interval input + scheduler/notifications support |
+| Grouped notifications (multiple pills at same time) | [x] Done — `src/services/notifications/index.ts` groups by `(timeOfDay, weekday)` and lists all pill names in body |
+| Notification action buttons ("Took it" / "Snooze") | [x] Done — `pill_reminder` category registered with both actions |
+| Snooze flow (15-minute reschedule) | [x] Done — Snooze schedules a one-shot 15-min reminder with the same payload |
+| `autoAssumeTaken` (foreground/local layer) | [x] Done — Settings toggle + `usePillStore.reconcileAutoAssumedDoses` writes auto doses on dashboard mount and `AppState` foreground transitions |
+| `autoAssumeTaken` background cron (true app-closed coverage) | [ ] **Deferred to Phase 5** — requires Supabase Edge Function + scheduled cron, which is the same infrastructure RevenueCat tier sync needs. Building it once, in Phase 5. |
 
-| Feature | Spec Reference | Effort |
-|---------|---------------|--------|
-| `every_n_days` frequency in add-pill UI | `GAMEPLAN.md` schedule section | Low — type exists, UI option missing |
-| Grouped notifications (multiple pills at same time) | `GAMEPLAN.md:267` | Medium — requires notification batching logic |
-| Notification action buttons ("Took it" / "Snooze") | `GAMEPLAN.md:268` | Medium — expo-notifications category actions |
-| Snooze flow (15-minute reschedule) | `GAMEPLAN.md:268` | Medium — ties into action buttons |
-| `autoAssumeTaken` behavior | `GAMEPLAN.md:269` | High — needs Cloud Function for background execution |
-
-**Status**: [ ] Prioritized for future phase
+**Status**: [x] Phase 4 closeout complete except for the cron-driven background piece of `autoAssumeTaken`, which is intentionally bundled with Phase 5 Edge Function work.
 
 ---
 

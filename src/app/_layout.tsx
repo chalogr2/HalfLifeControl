@@ -95,6 +95,7 @@ function AuthGate() {
       const uid = useAuthStore.getState().user?.uid;
       if (!uid) return;
       usePillStore.getState().cleanupOrphanedRandomPills(uid).catch(() => {});
+      usePillStore.getState().reconcileAutoAssumedDoses(uid).catch(() => {});
     });
     return () => sub.remove();
   }, []);
