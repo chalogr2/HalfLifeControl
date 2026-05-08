@@ -11,11 +11,6 @@ import type { ReminderMode } from '@/core/types';
 
 const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: string }[] = [
   {
-    value: 'auto_start',
-    title: 'Automatically start countdown at scheduled time',
-    description: 'Begins a visual timer immediately when it is time to take your medication',
-  },
-  {
     value: 'prompt',
     title: 'Prompt to answer if pill was taken',
     description: 'Confirms your dosage/time for accurate consumption tracking',
@@ -25,6 +20,11 @@ const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: strin
     title: 'Simple notification only',
     description: 'A brief/small notification alert informing you it is medication time',
   },
+  {
+    value: 'off',
+    title: 'Notifications off',
+    description: 'No reminders sent. You will mark doses manually from the dashboard.',
+  },
 ];
 
 export default function SettingsScreen() {
@@ -32,28 +32,48 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const tier = useSubscriptionStore((s) => s.tier);
   const [reminderMode, setReminderMode] = React.useState<ReminderMode>(
-    (user?.settings?.reminderMode as ReminderMode) ?? 'auto_start',
+    (user?.settings?.reminderMode as ReminderMode) ?? 'prompt',
   );
   const [autoAssumeTaken, setAutoAssumeTaken] = React.useState<boolean>(
     user?.settings?.autoAssumeTaken ?? false,
   );
 
+  // `prompt` is incoherent with autoAssumeTaken (we'd be asking the user to
+  // confirm a dose we already auto-recorded), so the row is locked while
+  // the switch is on.
+  const promptDisabled = autoAssumeTaken;
+
   const handleReminderChange = useCallback((mode: ReminderMode) => {
+    if (mode === 'prompt' && promptDisabled) return;
     setReminderMode(mode);
     if (user) {
-      updateUserSettings(user.uid, { ...user.settings, reminderMode: mode });
+      const nextSettings = { ...user.settings, reminderMode: mode };
+      useAuthStore.getState().setUser({ ...user, settings: nextSettings });
+      updateUserSettings(user.uid, nextSettings);
     }
-  }, [user]);
+  }, [user, promptDisabled]);
 
   const handleAutoAssumeToggle = useCallback((value: boolean) => {
     setAutoAssumeTaken(value);
     if (!user) return;
-    const nextSettings = { ...user.settings, autoAssumeTaken: value };
+    // If the user is on `prompt` and turns autoAssume on, drop them to
+    // `simple` — the prompt would never fire because the dose is already
+    // being recorded automatically.
+    const nextReminderMode: ReminderMode =
+      value && user.settings.reminderMode === 'prompt'
+        ? 'simple'
+        : user.settings.reminderMode;
+    if (nextReminderMode !== reminderMode) setReminderMode(nextReminderMode);
+    const nextSettings = {
+      ...user.settings,
+      autoAssumeTaken: value,
+      reminderMode: nextReminderMode,
+    };
     // Optimistic local-store update so dependent effects (notifications
     // scheduler, reconcile) pick it up before the Supabase write returns.
     useAuthStore.getState().setUser({ ...user, settings: nextSettings });
     updateUserSettings(user.uid, nextSettings);
-  }, [user]);
+  }, [user, reminderMode]);
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -74,38 +94,52 @@ export default function SettingsScreen() {
         </Typography>
 
         <View style={styles.reminderOptions}>
-          {REMINDER_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.value}
-              onPress={() => handleReminderChange(opt.value)}
-              style={({ pressed }) => pressed && styles.pressed}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: reminderMode === opt.value }}
-              accessibilityLabel={`${opt.title}. ${opt.description}`}
-            >
-              <Card
-                variant={reminderMode === opt.value ? 'outlined' : 'elevated'}
-                style={[
-                  styles.reminderCard,
-                  reminderMode === opt.value && styles.reminderCardActive,
+          {REMINDER_OPTIONS.map((opt) => {
+            const disabled = opt.value === 'prompt' && promptDisabled;
+            const isSelected = reminderMode === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => handleReminderChange(opt.value)}
+                disabled={disabled}
+                style={({ pressed }) => [
+                  pressed && !disabled && styles.pressed,
+                  disabled && styles.disabled,
                 ]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: isSelected, disabled }}
+                accessibilityLabel={
+                  disabled
+                    ? `${opt.title}. Disabled while Auto-assume taken is on.`
+                    : `${opt.title}. ${opt.description}`
+                }
               >
-                <View style={styles.reminderRow}>
-                  <View style={styles.radioOuter}>
-                    {reminderMode === opt.value && <View style={styles.radioInner} />}
+                <Card
+                  variant={isSelected ? 'outlined' : 'elevated'}
+                  style={[
+                    styles.reminderCard,
+                    isSelected && styles.reminderCardActive,
+                  ]}
+                >
+                  <View style={styles.reminderRow}>
+                    <View style={styles.radioOuter}>
+                      {isSelected && <View style={styles.radioInner} />}
+                    </View>
+                    <View style={styles.reminderContent}>
+                      <Typography variant="titleMd" color="onSurface">
+                        {opt.title}
+                      </Typography>
+                      <Typography variant="bodyLg" color="onSurfaceVariant">
+                        {disabled
+                          ? 'Disabled while Auto-assume taken is on.'
+                          : opt.description}
+                      </Typography>
+                    </View>
                   </View>
-                  <View style={styles.reminderContent}>
-                    <Typography variant="titleMd" color="onSurface">
-                      {opt.title}
-                    </Typography>
-                    <Typography variant="bodyLg" color="onSurfaceVariant">
-                      {opt.description}
-                    </Typography>
-                  </View>
-                </View>
-              </Card>
-            </Pressable>
-          ))}
+                </Card>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Auto-assume taken */}
@@ -113,16 +147,16 @@ export default function SettingsScreen() {
           <View style={styles.autoAssumeRow}>
             <View style={styles.autoAssumeContent}>
               <Typography variant="titleMd" color="onSurface">
-                Auto-assume taken
+                Automatically take pill
               </Typography>
               <Typography variant="bodyLg" color="onSurfaceVariant">
-                Skip notifications and automatically record doses at scheduled times. Background recording while the app is closed is coming in a future update.
+                Records doses on your behalf at each scheduled time. Disables the prompt option above. Background recording while the app is closed is coming in a future update.
               </Typography>
             </View>
             <Switch
               value={autoAssumeTaken}
               onValueChange={handleAutoAssumeToggle}
-              accessibilityLabel="Auto-assume taken"
+              accessibilityLabel="Automatically take pill"
             />
           </View>
         </Card>
@@ -318,5 +352,8 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });

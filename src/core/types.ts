@@ -72,7 +72,7 @@ export interface Dose {
   createdAt: Date;
 }
 
-export type ReminderMode = 'auto_start' | 'prompt' | 'simple';
+export type ReminderMode = 'prompt' | 'simple' | 'off';
 
 export interface UserSettings {
   autoAssumeTaken: boolean;

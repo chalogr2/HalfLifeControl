@@ -118,11 +118,35 @@ export async function getUserProfile(
     displayName: data.display_name ?? null,
     onboardingComplete: data.onboarding_complete ?? false,
     subscriptionTier: data.subscription_tier ?? 'free',
-    settings: data.settings ?? {
-      autoAssumeTaken: false,
-      notificationsEnabled: true,
-      reminderMode: 'auto_start',
-    },
+    settings: normalizeSettings(data.settings),
+  };
+}
+
+/**
+ * Normalize a settings blob loaded from Postgres. Handles the v1→v2
+ * reminderMode rename: legacy `'auto_start'` rows (the redundant
+ * "automatically start countdown" option that was replaced by the
+ * autoAssumeTaken switch) are migrated to the new default `'prompt'` so
+ * existing users land on a coherent setting after the upgrade.
+ */
+function normalizeSettings(raw: unknown): UserSettings {
+  const fallback: UserSettings = {
+    autoAssumeTaken: false,
+    notificationsEnabled: true,
+    reminderMode: 'prompt',
+  };
+  if (!raw || typeof raw !== 'object') return fallback;
+  const r = raw as Record<string, unknown>;
+  const legacyMode = r.reminderMode;
+  const mode: UserSettings['reminderMode'] =
+    legacyMode === 'simple' || legacyMode === 'off' || legacyMode === 'prompt'
+      ? legacyMode
+      : 'prompt';
+  return {
+    autoAssumeTaken: typeof r.autoAssumeTaken === 'boolean' ? r.autoAssumeTaken : false,
+    notificationsEnabled:
+      typeof r.notificationsEnabled === 'boolean' ? r.notificationsEnabled : true,
+    reminderMode: mode,
   };
 }
 

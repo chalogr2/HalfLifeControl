@@ -167,29 +167,39 @@ function buildBody(pills: Pill[]): string {
 
 /**
  * Cancel + re-schedule every pill reminder. Idempotent — call this whenever
- * the pill list changes.
+ * the pill list or relevant settings change.
  *
- * If `settings?.autoAssumeTaken` is true, we cancel existing reminders and
- * skip scheduling new ones. The dashboard's foreground-reconcile path
- * (Step E) writes dose records on the user's behalf instead.
+ * Gating:
+ *   reminderMode 'off'    → no notifications scheduled (silent mode).
+ *   reminderMode 'simple' → schedule without a category (banner only, no
+ *                           action buttons; tapping just opens the app).
+ *   reminderMode 'prompt' → schedule with the `pill_reminder` category so
+ *                           the user gets "Took it" / "Snooze 15min".
+ *
+ * autoAssumeTaken is decoupled from this scheduler — it controls whether
+ * doses are auto-recorded by `reconcileAutoAssumedDoses`, not whether
+ * banners fire. The settings UI prevents the incoherent
+ * `prompt + autoAssumeTaken` combination by locking the prompt row.
  */
 export async function scheduleAllPillReminders(
   pills: Pill[],
-  settings?: Pick<UserSettings, 'autoAssumeTaken' | 'notificationsEnabled'>,
+  settings?: Pick<UserSettings, 'reminderMode' | 'notificationsEnabled'>,
 ): Promise<void> {
   try {
     await ensureCategoryRegistered();
 
     // Always clear old pill reminders before deciding what to re-schedule —
-    // catches the case where a user toggled autoAssumeTaken on while
-    // reminders were already pending.
+    // catches the case where the user just toggled reminderMode to 'off' or
+    // changed which mode is active.
     await cancelAllPillReminders();
 
-    if (settings?.autoAssumeTaken) return;
+    if (settings?.reminderMode === 'off') return;
     if (settings?.notificationsEnabled === false) return;
 
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) return;
+
+    const usePromptCategory = settings?.reminderMode === 'prompt';
 
     const groups = buildGroups(pills);
     for (const group of groups) {
@@ -203,8 +213,12 @@ export async function scheduleAllPillReminders(
           data: {
             type: 'pill_reminder',
             pillIds: group.pills.map((p) => p.id),
+            // Stamp the mode the notification was scheduled under so the
+            // response handler can decide whether a default tap should
+            // record a dose (prompt) or just open the app (simple).
+            reminderMode: settings?.reminderMode ?? 'prompt',
           },
-          categoryIdentifier: PILL_CATEGORY_ID,
+          ...(usePromptCategory ? { categoryIdentifier: PILL_CATEGORY_ID } : {}),
         },
         trigger: group.trigger,
       });
@@ -300,9 +314,14 @@ async function handleResponse(response: Notifications.NotificationResponse): Pro
     return;
   }
 
-  // Both ACTION_TOOK_IT and the default tap dispatch as 'took_it'/'default'.
-  // Default tap is treated as a soft confirmation: open the app, let the
-  // dashboard decide whether to record or just navigate.
+  // A `simple` banner is informational only — tapping it should just open
+  // the app, not silently record doses. `prompt` notifications carry the
+  // category, so the explicit "Took it" action and the default tap both
+  // count as confirmation. Legacy notifications without a stamped mode
+  // (scheduled before this change) default to prompt-style recording.
+  const stampedMode = data.reminderMode;
+  if (actionId !== ACTION_TOOK_IT && stampedMode === 'simple') return;
+
   const action: NotificationAction =
     actionId === ACTION_TOOK_IT ? 'took_it' : 'default';
   if (responseHandler) responseHandler(pillIds, action);

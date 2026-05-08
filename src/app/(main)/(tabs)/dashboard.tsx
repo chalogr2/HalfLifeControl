@@ -21,12 +21,16 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
   const { pills, activeDoses, recordDose, pruneExpiredDoses, hardDeletePill } = usePillStore();
 
-  // Schedule notifications when pills change. Always run (not gated on
-  // pills.length > 0) so that removing the last pill also cleans up its
-  // pending reminder.
+  // Schedule notifications when pills or relevant settings change. Always
+  // run (not gated on pills.length > 0) so removing the last pill also
+  // cleans up its pending reminder, and toggling reminderMode to 'off'
+  // immediately tears down what's queued.
   useEffect(() => {
-    scheduleAllPillReminders(pills, user?.settings);
-  }, [pills, user?.settings]);
+    scheduleAllPillReminders(pills, {
+      reminderMode: user?.settings?.reminderMode ?? 'prompt',
+      notificationsEnabled: user?.settings?.notificationsEnabled ?? true,
+    });
+  }, [pills, user?.settings?.reminderMode, user?.settings?.notificationsEnabled]);
 
   // Real-time pruning: when an active dose's eliminationAt passes, drop it from
   // the store immediately so random-tracking pills disappear without requiring
