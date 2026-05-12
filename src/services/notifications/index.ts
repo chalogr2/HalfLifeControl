@@ -300,6 +300,10 @@ export async function scheduleAllEliminationNotifications(
     for (const dose of doses) {
       if (dose.status !== 'active') continue;
       if (dose.eliminationAt.getTime() <= now) continue;
+      // pillId is nullable on the Dose type (orphaned after pill hard-delete),
+      // but active doses always belong to a live pill, so we never expect null
+      // here. Guard anyway to keep the notification payload type-safe.
+      if (!dose.pillId) continue;
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Medication cleared',

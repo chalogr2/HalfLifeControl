@@ -15,7 +15,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 interface MedicationGroup {
-  pillId: string;
+  /**
+   * Stable grouping key. Equals `dose.pillId` for owned doses, falls back to
+   * `orphan:<drugName>` for doses whose pill has been hard-deleted (pillId
+   * is null on the server after migration 0004). Used as React key and in
+   * the per-card "expanded" Set, so it must be unique within a day card.
+   */
+  key: string;
   drugName: string;
   color: string;
   doses: Dose[];
@@ -52,29 +58,36 @@ function formatTime(date: Date): string {
 }
 
 /**
- * Look up the pill's color from the current store. Soft-deleted pills are
- * filtered out of usePillStore, so missing-pill case falls back to the
- * primary accent — keeps history rendering correct after a pill is removed
- * from the stack.
+ * Look up the pill's color from the current store. Soft-deleted (filtered out
+ * of usePillStore by the isActive gate) and hard-deleted (pillId is null
+ * after the FK SET NULL kicks in) pills both fall back to the primary accent.
  */
-function lookupPillColor(pills: Pill[], pillId: string): string {
+function lookupPillColor(pills: Pill[], pillId: string | null): string {
+  if (!pillId) return colors.primary;
   return pills.find((p) => p.id === pillId)?.color ?? colors.primary;
 }
 
+function groupKey(dose: Dose): string {
+  // Orphan doses (pillId === null) bucket per-drugName so multiple distinct
+  // deleted one-off pills don't all collapse into one anonymous group.
+  return dose.pillId ?? `orphan:${dose.drugName}`;
+}
+
 function buildMedicationGroups(doses: Dose[], pills: Pill[]): MedicationGroup[] {
-  const byPill = new Map<string, Dose[]>();
+  const byKey = new Map<string, Dose[]>();
   for (const dose of doses) {
-    const existing = byPill.get(dose.pillId) ?? [];
+    const key = groupKey(dose);
+    const existing = byKey.get(key) ?? [];
     existing.push(dose);
-    byPill.set(dose.pillId, existing);
+    byKey.set(key, existing);
   }
-  return Array.from(byPill.entries())
-    .map(([pillId, ds]) => ({
-      pillId,
+  return Array.from(byKey.entries())
+    .map(([key, ds]) => ({
+      key,
       // drugName lives on the Dose itself (snapshot at record time), so it's
       // stable even if the pill row has since been deleted or renamed.
       drugName: ds[0].drugName,
-      color: lookupPillColor(pills, pillId),
+      color: lookupPillColor(pills, ds[0].pillId),
       doses: ds.sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime()),
     }))
     .sort((a, b) => a.drugName.localeCompare(b.drugName));
@@ -213,11 +226,11 @@ export default function HistoryScreen() {
               <View style={styles.medList}>
                 {item.medications.map((med) => {
                   const isSingle = med.doses.length === 1;
-                  const isOpen = expanded.has(`${item.dateKey}:${med.pillId}`);
+                  const isOpen = expanded.has(`${item.dateKey}:${med.key}`);
                   return (
-                    <View key={med.pillId}>
+                    <View key={med.key}>
                       <Pressable
-                        onPress={() => !isSingle && toggleExpanded(item.dateKey, med.pillId)}
+                        onPress={() => !isSingle && toggleExpanded(item.dateKey, med.key)}
                         disabled={isSingle}
                         accessibilityRole={isSingle ? undefined : 'button'}
                         accessibilityState={isSingle ? undefined : { expanded: isOpen }}

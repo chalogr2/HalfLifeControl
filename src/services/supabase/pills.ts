@@ -122,7 +122,7 @@ function serializeDose(dose: Dose): Record<string, any> {
 function deserializeDose(raw: Record<string, any>): Dose {
   return {
     id: raw.id,
-    pillId: raw.pillId ?? raw.pill_id,
+    pillId: raw.pillId ?? raw.pill_id ?? null,
     drugName: raw.drugName ?? raw.drug_name,
     takenAt: toDate(raw.takenAt ?? raw.taken_at),
     scheduledFor: (raw.scheduledFor ?? raw.scheduled_for) ? toDate(raw.scheduledFor ?? raw.scheduled_for) : null,
@@ -453,17 +453,11 @@ async function executeOperation(uid: string, operation: WriteOperation): Promise
     }
 
     case 'hardDeletePill': {
-      // Full removal — used for one-time tracking pills whose lifecycle has
-      // ended. Doses go first (no FK orphan window), then the pill row itself.
-      // Idempotent: if either row is already gone, the DELETE simply matches
-      // zero rows and Postgres returns success.
-      const { error: dosesError } = await supabase
-        .from('doses')
-        .delete()
-        .eq('pill_id', operation.pillId)
-        .eq('user_id', uid);
-      if (dosesError) throw dosesError;
-
+      // Hard-delete the pill row only. doses.pill_id is ON DELETE SET NULL
+      // (migration 0004), so Postgres orphans the dose rows in place rather
+      // than cascading them away — dose history survives for one-time
+      // tracking pills whose lifecycle has ended. Idempotent: a missing
+      // pill row matches zero rows and returns success.
       const { error: pillError } = await supabase
         .from('pills')
         .delete()

@@ -174,7 +174,7 @@ create index pills_user_active_idx on public.pills (user_id, is_active);
 create table public.doses (
   id                 uuid primary key default gen_random_uuid(),
   user_id            uuid not null references auth.users(id) on delete cascade,
-  pill_id            uuid not null references public.pills(id) on delete cascade,
+  pill_id            uuid references public.pills(id) on delete set null,  -- nullable + SET NULL since migration 0004 so one-off pill history survives hard-delete
   drug_name          text not null,        -- denormalized for history display
   taken_at           timestamptz not null,
   scheduled_for      timestamptz,

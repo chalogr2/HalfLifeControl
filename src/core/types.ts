@@ -55,7 +55,13 @@ export interface Pill {
 
 export interface Dose {
   id: string;
-  pillId: string;
+  /**
+   * Owning pill ID, or `null` when the pill row has been hard-deleted (e.g.
+   * a one-time tracking pill that completed its lifecycle). The dose still
+   * carries `drugName` for display; renderers should fall back gracefully
+   * when `pillId` is null or the lookup against the current pill list fails.
+   */
+  pillId: string | null;
   drugName: string;
   takenAt: Date;
   scheduledFor: Date | null;
