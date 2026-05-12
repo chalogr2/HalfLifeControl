@@ -99,8 +99,8 @@ export default function SettingsScreen() {
         <Typography variant="headlineLg" color="primary" style={styles.title}>Settings</Typography>
 
         {/* Reminders section */}
-        <Typography variant="titleMd" color="primary" style={styles.sectionTitle}>Reminders</Typography>
-        <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
+        <Typography variant="titleLg" color="primary" style={styles.sectionTitle}>Reminders</Typography>
+        <Typography variant="bodyLg" color="onSurfaceVariant" style={styles.sectionSub}>
           Customize how you would like to be notified about your medications.
         </Typography>
 
