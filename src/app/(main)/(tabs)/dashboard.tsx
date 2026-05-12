@@ -8,7 +8,11 @@ import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { nextScheduledDose } from '@/core/scheduling';
-import { scheduleAllPillReminders, setNotificationResponseHandler } from '@/services/notifications';
+import {
+  scheduleAllPillReminders,
+  scheduleAllEliminationNotifications,
+  setNotificationResponseHandler,
+} from '@/services/notifications';
 import type { Pill, Dose } from '@/core/types';
 
 interface Section {
@@ -31,6 +35,21 @@ export default function DashboardScreen() {
       notificationsEnabled: user?.settings?.notificationsEnabled ?? true,
     });
   }, [pills, user?.settings?.reminderMode, user?.settings?.notificationsEnabled]);
+
+  // Schedule dose-elimination banners separately — they key off the
+  // active-dose list (which changes on every record / dismiss / prune),
+  // not the pill list. Driven by `eliminationNotificationsEnabled`.
+  useEffect(() => {
+    scheduleAllEliminationNotifications(activeDoses, {
+      eliminationNotificationsEnabled:
+        user?.settings?.eliminationNotificationsEnabled ?? true,
+      notificationsEnabled: user?.settings?.notificationsEnabled ?? true,
+    });
+  }, [
+    activeDoses,
+    user?.settings?.eliminationNotificationsEnabled,
+    user?.settings?.notificationsEnabled,
+  ]);
 
   // Real-time pruning: when an active dose's eliminationAt passes, drop it from
   // the store immediately so random-tracking pills disappear without requiring

@@ -37,6 +37,9 @@ export default function SettingsScreen() {
   const [autoAssumeTaken, setAutoAssumeTaken] = React.useState<boolean>(
     user?.settings?.autoAssumeTaken ?? false,
   );
+  const [eliminationNotifsEnabled, setEliminationNotifsEnabled] = React.useState<boolean>(
+    user?.settings?.eliminationNotificationsEnabled ?? true,
+  );
 
   // `prompt` is incoherent with autoAssumeTaken (we'd be asking the user to
   // confirm a dose we already auto-recorded), so the row is locked while
@@ -74,6 +77,14 @@ export default function SettingsScreen() {
     useAuthStore.getState().setUser({ ...user, settings: nextSettings });
     updateUserSettings(user.uid, nextSettings);
   }, [user, reminderMode]);
+
+  const handleEliminationNotifsToggle = useCallback((value: boolean) => {
+    setEliminationNotifsEnabled(value);
+    if (!user) return;
+    const nextSettings = { ...user.settings, eliminationNotificationsEnabled: value };
+    useAuthStore.getState().setUser({ ...user, settings: nextSettings });
+    updateUserSettings(user.uid, nextSettings);
+  }, [user]);
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -143,9 +154,9 @@ export default function SettingsScreen() {
         </View>
 
         {/* Auto-assume taken */}
-        <Card variant="elevated" style={styles.autoAssumeCard}>
-          <View style={styles.autoAssumeRow}>
-            <View style={styles.autoAssumeContent}>
+        <Card variant="elevated" style={styles.toggleCard}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleContent}>
               <Typography variant="titleMd" color="onSurface">
                 Automatically take pill
               </Typography>
@@ -157,6 +168,25 @@ export default function SettingsScreen() {
               value={autoAssumeTaken}
               onValueChange={handleAutoAssumeToggle}
               accessibilityLabel="Automatically take pill"
+            />
+          </View>
+        </Card>
+
+        {/* Dose-elimination notification — last toggle, carries the section break */}
+        <Card variant="elevated" style={[styles.toggleCard, styles.toggleCardLast]}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleContent}>
+              <Typography variant="titleMd" color="onSurface">
+                Notify when dose clears
+              </Typography>
+              <Typography variant="bodyLg" color="onSurfaceVariant">
+                Get a banner when each dose has cleared from your system.
+              </Typography>
+            </View>
+            <Switch
+              value={eliminationNotifsEnabled}
+              onValueChange={handleEliminationNotifsToggle}
+              accessibilityLabel="Notify when dose clears"
             />
           </View>
         </Card>
@@ -254,17 +284,20 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     marginBottom: spacing[4],
   },
-  autoAssumeCard: {
+  toggleCard: {
     paddingVertical: spacing[4],
     paddingHorizontal: spacing[4],
+    marginBottom: spacing[3],
+  },
+  toggleCardLast: {
     marginBottom: spacing[8],
   },
-  autoAssumeRow: {
+  toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
   },
-  autoAssumeContent: {
+  toggleContent: {
     flex: 1,
     gap: spacing[1],
   },

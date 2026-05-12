@@ -190,6 +190,7 @@ Only non-sensitive metadata (the `lastSync` timestamp) remains unencrypted.
 | Notification action buttons ("Took it" / "Snooze") | [x] Done — `pill_reminder` category registered with both actions |
 | Snooze flow (15-minute reschedule) | [x] Done — Snooze schedules a one-shot 15-min reminder with the same payload |
 | `autoAssumeTaken` (foreground/local layer) | [x] Done — Settings toggle + `usePillStore.reconcileAutoAssumedDoses` writes auto doses on dashboard mount and `AppState` foreground transitions |
+| Dose-elimination notification ("dose has cleared") | [x] Done — `scheduleAllEliminationNotifications` schedules a one-shot DATE banner at each active dose's `eliminationAt`. Settings switch `eliminationNotificationsEnabled` (default ON) gates whether banners fire. |
 | `autoAssumeTaken` background cron (true app-closed coverage) | [ ] **Deferred to Phase 5** — requires Supabase Edge Function + scheduled cron, which is the same infrastructure RevenueCat tier sync needs. Building it once, in Phase 5. |
 
 **Status**: [x] Phase 4 closeout complete except for the cron-driven background piece of `autoAssumeTaken`, which is intentionally bundled with Phase 5 Edge Function work.

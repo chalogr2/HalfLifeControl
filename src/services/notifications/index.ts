@@ -15,7 +15,7 @@
  * Server-side push is also deferred to a follow-up phase.
  */
 import * as Notifications from 'expo-notifications';
-import type { Pill, UserSettings } from '@/core/types';
+import type { Pill, Dose, UserSettings } from '@/core/types';
 import { nextScheduledDose } from '@/core/scheduling';
 import { captureException } from '@/services/sentry';
 
@@ -243,23 +243,88 @@ async function cancelAllPillReminders(): Promise<void> {
 }
 
 /**
- * Cancel scheduled notifications that reference a specific pill. With
+ * Cancel scheduled notifications that reference a specific pill —
+ * covers both scheduled-time reminders and dose-elimination banners. With
  * grouped notifications this can over-cancel (a daily-08:00 group covering
  * three pills is cancelled if any one of them is removed), but the
- * dashboard immediately calls `scheduleAllPillReminders` on the pill-list
- * change, which rebuilds the group cleanly without the removed pill.
+ * dashboard immediately calls `scheduleAllPillReminders` /
+ * `scheduleAllEliminationNotifications` on the pill-list and dose-list
+ * changes, which rebuilds groups cleanly without the removed pill.
  */
 export async function cancelPillReminders(pillId: string): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   for (const notif of scheduled) {
     const data = notif.content.data;
-    if (!data || data.type !== 'pill_reminder') continue;
+    if (!data) continue;
+    if (data.type !== 'pill_reminder' && data.type !== 'dose_elimination') continue;
     const ids: string[] = Array.isArray(data.pillIds)
       ? (data.pillIds as string[])
       : data.pillId
         ? [data.pillId as string]
         : [];
     if (ids.includes(pillId)) {
+      await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+    }
+  }
+}
+
+// ─── Dose-Elimination Notifications ──────────────────
+
+/**
+ * Schedule a one-shot DATE notification at each active dose's
+ * `eliminationAt`. Idempotent — call whenever the active-dose list or the
+ * `eliminationNotificationsEnabled` setting changes.
+ *
+ * Doses whose `eliminationAt` is already in the past are skipped (would
+ * otherwise fire immediately on schedule, surprising the user). The
+ * dashboard's expiry-timer effect handles in-session pruning for those.
+ *
+ * No category attached — these are informational banners only. Tapping
+ * just opens the app; nothing to record because the dose lifecycle is
+ * already terminal at that point.
+ */
+export async function scheduleAllEliminationNotifications(
+  doses: Dose[],
+  settings?: Pick<UserSettings, 'eliminationNotificationsEnabled' | 'notificationsEnabled'>,
+): Promise<void> {
+  try {
+    await cancelAllEliminationNotifications();
+
+    if (settings?.eliminationNotificationsEnabled === false) return;
+    if (settings?.notificationsEnabled === false) return;
+
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return;
+
+    const now = Date.now();
+    for (const dose of doses) {
+      if (dose.status !== 'active') continue;
+      if (dose.eliminationAt.getTime() <= now) continue;
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Medication cleared',
+          body: `${dose.drugName} has cleared from your system.`,
+          data: {
+            type: 'dose_elimination',
+            pillIds: [dose.pillId],
+            doseId: dose.id,
+          },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: dose.eliminationAt,
+        },
+      });
+    }
+  } catch (error) {
+    captureException(error);
+  }
+}
+
+async function cancelAllEliminationNotifications(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const notif of scheduled) {
+    if (notif.content.data?.type === 'dose_elimination') {
       await Notifications.cancelScheduledNotificationAsync(notif.identifier);
     }
   }

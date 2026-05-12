@@ -77,6 +77,13 @@ export type ReminderMode = 'prompt' | 'simple' | 'off';
 export interface UserSettings {
   autoAssumeTaken: boolean;
   notificationsEnabled: boolean;
+  /**
+   * If true, a one-shot banner fires when each active dose's
+   * `eliminationAt` is reached ("{drug} has cleared from your system").
+   * Defaults to true. Independent of `reminderMode` — that controls
+   * scheduled-time reminders only.
+   */
+  eliminationNotificationsEnabled: boolean;
   reminderMode: ReminderMode;
 }
 

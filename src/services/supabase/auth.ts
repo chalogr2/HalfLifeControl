@@ -133,6 +133,7 @@ function normalizeSettings(raw: unknown): UserSettings {
   const fallback: UserSettings = {
     autoAssumeTaken: false,
     notificationsEnabled: true,
+    eliminationNotificationsEnabled: true,
     reminderMode: 'prompt',
   };
   if (!raw || typeof raw !== 'object') return fallback;
@@ -146,6 +147,10 @@ function normalizeSettings(raw: unknown): UserSettings {
     autoAssumeTaken: typeof r.autoAssumeTaken === 'boolean' ? r.autoAssumeTaken : false,
     notificationsEnabled:
       typeof r.notificationsEnabled === 'boolean' ? r.notificationsEnabled : true,
+    eliminationNotificationsEnabled:
+      typeof r.eliminationNotificationsEnabled === 'boolean'
+        ? r.eliminationNotificationsEnabled
+        : true,
     reminderMode: mode,
   };
 }
