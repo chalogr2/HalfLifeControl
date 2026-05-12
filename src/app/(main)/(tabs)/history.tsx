@@ -32,6 +32,14 @@ interface DayGroup {
   label: string;
   pillsTaken: number;
   uniquePills: number;
+  /**
+   * Count of doses whose owning pill is one-off (`pillType === 'random'`)
+   * or has been hard-deleted (`pillId === null` after migration 0004, or
+   * lookup against the current pill list returns undefined). Scheduled
+   * pills only soft-delete, so an unresolvable lookup is by construction a
+   * past one-off.
+   */
+  oneOffDoses: number;
   medications: MedicationGroup[];
 }
 
@@ -135,11 +143,18 @@ export default function HistoryScreen() {
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([dateKey, doses]) => {
         const medications = buildMedicationGroups(doses, pills);
+        const oneOffDoses = doses.reduce((n, d) => {
+          const pill = d.pillId ? pills.find((p) => p.id === d.pillId) : undefined;
+          // Pill gone → orphan → was a one-off (scheduled pills only soft-delete).
+          // Pill present and random → one-off by type.
+          return n + (!pill || pill.pillType === 'random' ? 1 : 0);
+        }, 0);
         return {
           dateKey,
           label: formatDayLabel(doses[0].takenAt),
           pillsTaken: doses.length,
           uniquePills: medications.length,
+          oneOffDoses,
           medications,
         };
       });
@@ -205,19 +220,33 @@ export default function HistoryScreen() {
 
             <View style={styles.dayStats}>
               <View style={styles.stat}>
-                <Typography variant="headlineSm" color="primary">
-                  {item.pillsTaken}
-                </Typography>
-                <Typography variant="bodyLg" color="onSurfaceVariant">
+                <View style={[styles.statCircle, { backgroundColor: colors.primary }]}>
+                  <Typography variant="titleLg" color="onPrimary">
+                    {item.pillsTaken}
+                  </Typography>
+                </View>
+                <Typography variant="bodyMd" color="onSurfaceVariant" align="center">
                   pills taken
                 </Typography>
               </View>
               <View style={styles.stat}>
-                <Typography variant="headlineSm" color="secondary">
-                  {item.uniquePills}
-                </Typography>
-                <Typography variant="bodyLg" color="onSurfaceVariant">
+                <View style={[styles.statCircle, { backgroundColor: colors.secondary }]}>
+                  <Typography variant="titleLg" color="onSecondary">
+                    {item.uniquePills}
+                  </Typography>
+                </View>
+                <Typography variant="bodyMd" color="onSurfaceVariant" align="center">
                   medications
+                </Typography>
+              </View>
+              <View style={styles.stat}>
+                <View style={[styles.statCircle, { backgroundColor: colors.tertiary }]}>
+                  <Typography variant="titleLg" color="onTertiary">
+                    {item.oneOffDoses}
+                  </Typography>
+                </View>
+                <Typography variant="bodyMd" color="onSurfaceVariant" align="center">
+                  one-offs
                 </Typography>
               </View>
             </View>
@@ -319,13 +348,22 @@ const styles = StyleSheet.create({
   },
   dayStats: {
     flexDirection: 'row',
-    gap: spacing[8],
+    gap: spacing[3],
     paddingTop: spacing[4],
     borderTopWidth: 1,
     borderTopColor: colors.surfaceVariant + '4D',
   },
   stat: {
-    gap: spacing[1],
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  statCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   medList: {
     gap: spacing[2],
