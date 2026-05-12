@@ -1,20 +1,32 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, SectionList, Pressable, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { View, StyleSheet, SectionList, Pressable, ActivityIndicator, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { usePillStore } from '@/stores/usePillStore';
 import { fetchDoseHistory } from '@/services/supabase/pills';
 import { captureException } from '@/services/sentry';
-import type { Dose } from '@/core/types';
+import type { Dose, Pill } from '@/core/types';
+
+// Smooth dropdown expand/collapse on Android. iOS uses LayoutAnimation by default.
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+interface MedicationGroup {
+  pillId: string;
+  drugName: string;
+  color: string;
+  doses: Dose[];
+}
 
 interface DayGroup {
   dateKey: string;
   label: string;
-  doses: Dose[];
   pillsTaken: number;
   uniquePills: number;
+  medications: MedicationGroup[];
 }
 
 function formatDayLabel(date: Date): string {
@@ -31,11 +43,52 @@ function isToday(dateKey: string): boolean {
   return dateKey === getDateKey(new Date());
 }
 
+function formatTime(date: Date): string {
+  const h = date.getHours();
+  const m = date.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+/**
+ * Look up the pill's color from the current store. Soft-deleted pills are
+ * filtered out of usePillStore, so missing-pill case falls back to the
+ * primary accent — keeps history rendering correct after a pill is removed
+ * from the stack.
+ */
+function lookupPillColor(pills: Pill[], pillId: string): string {
+  return pills.find((p) => p.id === pillId)?.color ?? colors.primary;
+}
+
+function buildMedicationGroups(doses: Dose[], pills: Pill[]): MedicationGroup[] {
+  const byPill = new Map<string, Dose[]>();
+  for (const dose of doses) {
+    const existing = byPill.get(dose.pillId) ?? [];
+    existing.push(dose);
+    byPill.set(dose.pillId, existing);
+  }
+  return Array.from(byPill.entries())
+    .map(([pillId, ds]) => ({
+      pillId,
+      // drugName lives on the Dose itself (snapshot at record time), so it's
+      // stable even if the pill row has since been deleted or renamed.
+      drugName: ds[0].drugName,
+      color: lookupPillColor(pills, pillId),
+      doses: ds.sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime()),
+    }))
+    .sort((a, b) => a.drugName.localeCompare(b.drugName));
+}
+
 export default function HistoryScreen() {
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const pills = usePillStore((s) => s.pills);
   const [allDoses, setAllDoses] = useState<Dose[]>([]);
   const [loading, setLoading] = useState(true);
+  // Track which (dateKey, pillId) rows are expanded. A medication is
+  // collapsible only when its dose count is >1; singletons render inline
+  // and ignore this set.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -44,7 +97,6 @@ export default function HistoryScreen() {
     (async () => {
       setLoading(true);
       try {
-        // Fetch last 3 months of history (3 reads max)
         const doses = await fetchDoseHistory(user.uid, 3);
         if (!cancelled) setAllDoses(doses);
       } catch (err) {
@@ -69,46 +121,32 @@ export default function HistoryScreen() {
     return Array.from(groups.entries())
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([dateKey, doses]) => {
-        const uniquePills = new Set(doses.map((d) => d.pillId)).size;
+        const medications = buildMedicationGroups(doses, pills);
         return {
           dateKey,
           label: formatDayLabel(doses[0].takenAt),
-          doses,
           pillsTaken: doses.length,
-          uniquePills,
+          uniquePills: medications.length,
+          medications,
         };
       });
-  }, [allDoses]);
-
-  // Adherence = days with at least 1 dose / total days in date range
-  const adherencePercent = useMemo(() => {
-    if (dayGroups.length === 0) return 0;
-    // Calculate the actual date range span (first dose to today)
-    const sortedKeys = dayGroups.map((g) => g.dateKey).sort();
-    const earliest = sortedKeys[0];
-    const [y, m, d] = earliest.split('-').map(Number);
-    const startDate = new Date(y, m - 1, d);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const totalDays = Math.max(
-      1,
-      Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
-    );
-    const daysWithDoses = dayGroups.length;
-    return Math.round((daysWithDoses / totalDays) * 100);
-  }, [dayGroups]);
+  }, [allDoses, pills]);
 
   const sections = useMemo(
     () => dayGroups.map((g) => ({ title: g.label, dateKey: g.dateKey, data: [g] })),
     [dayGroups],
   );
 
-  const handleDayPress = useCallback(
-    (dateKey: string) => {
-      router.push(`/(main)/history/${dateKey}`);
-    },
-    [router],
-  );
+  const toggleExpanded = useCallback((dateKey: string, pillId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      const key = `${dateKey}:${pillId}`;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -130,24 +168,6 @@ export default function HistoryScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Typography variant="headlineLg" color="primary">History</Typography>
-
-            {/* Adherence summary */}
-            {dayGroups.length > 0 && (
-              <View style={styles.adherenceCard}>
-                <Typography variant="bodyMd" color="onSurfaceVariant">
-                  OVERALL ADHERENCE
-                </Typography>
-                <View style={styles.adherenceRow}>
-                  <Typography variant="displayMd" color="primary">
-                    {adherencePercent}%
-                  </Typography>
-                  <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.adherenceLabel}>
-                    {'\n'}Based on your {dayGroups.length} tracked day{dayGroups.length !== 1 ? 's' : ''}.{'\n'}
-                    You're doing great!
-                  </Typography>
-                </View>
-              </View>
-            )}
           </View>
         }
         ListEmptyComponent={
@@ -163,39 +183,91 @@ export default function HistoryScreen() {
         renderSectionHeader={() => null}
         renderSectionFooter={() => <View style={styles.sectionGap} />}
         renderItem={({ item }) => (
-          <Pressable
-            onPress={() => handleDayPress(item.dateKey)}
-            style={({ pressed }) => pressed && styles.pressed}
-            accessibilityRole="button"
-            accessibilityLabel={`${isToday(item.dateKey) ? 'Today' : item.label}, ${item.pillsTaken} pills taken, ${item.uniquePills} medications`}
-            accessibilityHint="View day detail"
-          >
-            <Card variant="scheduled" style={styles.dayCard}>
-              <View style={styles.dayHeader}>
-                <Typography variant="headlineSm">
-                  {isToday(item.dateKey) ? 'Today' : item.label}
+          <Card variant="scheduled" style={styles.dayCard}>
+            <View style={styles.dayHeader}>
+              <Typography variant="headlineSm">
+                {isToday(item.dateKey) ? 'Today' : item.label}
+              </Typography>
+            </View>
+
+            <View style={styles.dayStats}>
+              <View style={styles.stat}>
+                <Typography variant="headlineSm" color="primary">
+                  {item.pillsTaken}
+                </Typography>
+                <Typography variant="bodyLg" color="onSurfaceVariant">
+                  pills taken
                 </Typography>
               </View>
-              <View style={styles.dayStats}>
-                <View style={styles.stat}>
-                  <Typography variant="headlineSm" color="primary">
-                    {item.pillsTaken}
-                  </Typography>
-                  <Typography variant="bodyLg" color="onSurfaceVariant">
-                    pills taken
-                  </Typography>
-                </View>
-                <View style={styles.stat}>
-                  <Typography variant="headlineSm" color="secondary">
-                    {item.uniquePills}
-                  </Typography>
-                  <Typography variant="bodyLg" color="onSurfaceVariant">
-                    medications
-                  </Typography>
-                </View>
+              <View style={styles.stat}>
+                <Typography variant="headlineSm" color="secondary">
+                  {item.uniquePills}
+                </Typography>
+                <Typography variant="bodyLg" color="onSurfaceVariant">
+                  medications
+                </Typography>
               </View>
-            </Card>
-          </Pressable>
+            </View>
+
+            {item.medications.length > 0 && (
+              <View style={styles.medList}>
+                {item.medications.map((med) => {
+                  const isSingle = med.doses.length === 1;
+                  const isOpen = expanded.has(`${item.dateKey}:${med.pillId}`);
+                  return (
+                    <View key={med.pillId}>
+                      <Pressable
+                        onPress={() => !isSingle && toggleExpanded(item.dateKey, med.pillId)}
+                        disabled={isSingle}
+                        accessibilityRole={isSingle ? undefined : 'button'}
+                        accessibilityState={isSingle ? undefined : { expanded: isOpen }}
+                        accessibilityLabel={
+                          isSingle
+                            ? `${med.drugName} taken at ${formatTime(med.doses[0].takenAt)}`
+                            : `${med.drugName}, ${med.doses.length} doses${isOpen ? ', expanded' : ', collapsed'}`
+                        }
+                        style={({ pressed }) => [
+                          styles.medRow,
+                          pressed && !isSingle && styles.medRowPressed,
+                        ]}
+                      >
+                        <View style={[styles.medDot, { backgroundColor: med.color }]} />
+                        <Typography variant="titleMd" style={styles.medName}>
+                          {med.drugName}
+                        </Typography>
+                        <Typography variant="bodyLg" color="onSurfaceVariant">
+                          {isSingle
+                            ? formatTime(med.doses[0].takenAt)
+                            : `${med.doses.length} doses`}
+                        </Typography>
+                        {!isSingle && (
+                          <Typography
+                            variant="bodyLg"
+                            color="onSurfaceVariant"
+                            style={styles.chevron}
+                          >
+                            {isOpen ? '▾' : '▸'}
+                          </Typography>
+                        )}
+                      </Pressable>
+
+                      {!isSingle && isOpen && (
+                        <View style={styles.medDoseList}>
+                          {med.doses.map((d) => (
+                            <View key={d.id} style={styles.medDoseRow}>
+                              <Typography variant="bodyMd" color="onSurfaceVariant">
+                                Taken at {formatTime(d.takenAt)}
+                              </Typography>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </Card>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
@@ -222,20 +294,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[4],
     gap: spacing[4],
   },
-  adherenceCard: {
-    backgroundColor: colors.surfaceContainerLow,
-    borderRadius: borderRadius['2xl'],
-    padding: spacing[6],
-    gap: spacing[2],
-  },
-  adherenceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-  },
-  adherenceLabel: {
-    flex: 1,
-  },
   dayCard: {
     gap: spacing[4],
     padding: spacing[6],
@@ -251,23 +309,56 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     paddingTop: spacing[4],
     borderTopWidth: 1,
-    borderTopColor: colors.surfaceVariant + '4D', // ~30% opacity
+    borderTopColor: colors.surfaceVariant + '4D',
   },
   stat: {
     gap: spacing[1],
+  },
+  medList: {
+    gap: spacing[2],
+    paddingTop: spacing[4],
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceVariant + '4D',
+  },
+  medRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  medRowPressed: {
+    opacity: 0.7,
+  },
+  medDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  medName: {
+    flex: 1,
+  },
+  chevron: {
+    marginLeft: spacing[2],
+    minWidth: 16,
+    textAlign: 'center',
+  },
+  medDoseList: {
+    paddingLeft: spacing[6],
+    paddingBottom: spacing[2],
+    gap: spacing[1],
+  },
+  medDoseRow: {
+    paddingVertical: spacing[1],
   },
   separator: {
     height: spacing[8],
   },
   sectionGap: {
-    height: spacing[3], // 12px — matches dashboard item separator
+    height: spacing[3],
   },
   empty: {
     paddingVertical: spacing[16],
     alignItems: 'center',
     gap: spacing[3],
-  },
-  pressed: {
-    opacity: 0.85,
   },
 });
