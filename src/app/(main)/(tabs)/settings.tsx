@@ -22,8 +22,8 @@ const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: strin
   },
   {
     value: 'off',
-    title: 'Notifications off',
-    description: 'No reminders sent. You will mark doses manually from the dashboard.',
+    title: 'No reminder',
+    description: 'No scheduled reminder is sent. You will mark doses manually from the dashboard.',
   },
 ];
 
