@@ -359,9 +359,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   statCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
