@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: spacing[2],
-    paddingBottom: spacing[4],
+    paddingBottom: spacing[6],
     gap: spacing[4],
   },
   dayCard: {
