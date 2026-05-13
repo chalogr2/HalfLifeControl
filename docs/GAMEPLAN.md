@@ -271,11 +271,15 @@ Key UX principles for elderly users:
 
 ## Notifications
 
-- **Local notifications** (expo-notifications) are primary — scheduled at pill creation time
-- Multiple pills at same time → grouped into one notification: "Time to take Aspirin, Metformin"
-- Action buttons on notification: **"Took it"** (starts countdown) and **"Snooze 15min"**
-- **Auto-assume mode**: user setting that skips notifications and auto-creates dose records at scheduled times (via Supabase Edge Function — deferred to follow-up)
-- **Server push**: Deferred. The app currently uses local notifications only. Server-initiated push (via Supabase Edge Functions + APNs/FCM) will be added in a future phase
+- **Local notifications** (expo-notifications) are primary — scheduled at pill creation time and re-scheduled whenever the pill list or relevant settings change.
+- Multiple pills at the same time are coalesced into one banner: "Time to take Aspirin, Metformin". `every_n_days` schedules don't coalesce (each pill gets its own one-shot DATE trigger for the next occurrence; re-scheduled on every pill-list change).
+- **Reminder mode** (Settings) governs the scheduled-time banner shape:
+  - `prompt` (default): banner carries the `pill_reminder` category — **"Took it"** (records the dose for every pill in the group) and **"Snooze 15min"** (one-shot reminder with the same payload).
+  - `simple`: banner without action buttons; tap-to-open is a no-op (informational only).
+  - `off`: no scheduled-time banner.
+- **Dose-elimination banner**: a separate one-shot DATE notification fires at each dose's `eliminationAt` ("{drug} has cleared from your system"). Independent setting (`eliminationNotificationsEnabled`, default ON), independent of `reminderMode`.
+- **Auto-assume mode** (`autoAssumeTaken` setting): records doses on the user's behalf at each scheduled time and disables the `prompt` mode (the prompt would never fire if we're already auto-recording). The foreground layer ships: `reconcileAutoAssumedDoses` writes auto-source doses on cold-start init and AppState foreground transitions. True background coverage (dose recorded when the app is fully closed) requires a Supabase Edge Function cron and is bundled with Phase 5 so the Edge Function infra deploys once.
+- **Server push**: Deferred. The app currently uses local notifications only. Server-initiated push (via Supabase Edge Functions + APNs/FCM) will be added in a future phase when there are backend events to push.
 
 ---
 
@@ -345,7 +349,7 @@ Key UX principles for elderly users:
 
 ### Phase 6: Polish + Android Launch
 - Social login (Google, Apple)
-- History/log screen — match `refined_history_list_screen/` + `refined_day_detail_view_screen/` from Stitch
+- History/log screen — match `refined_history_list_screen/` from Stitch. (The Stitch `refined_day_detail_view_screen/` flow was dropped: day cards are self-contained — three colored stat circles for pills taken / medications / one-offs and an inline per-medication breakdown — so a separate detail route is unnecessary.)
 - Settings screen — match `final_settings_screen_with_large_legal_buttons/` from Stitch
 - Privacy policy + Terms of Service screens — match `privacy_policy/` + `terms_of_service/` from Stitch
 - Accessibility audit (TalkBack on Android first, VoiceOver when Mac available)

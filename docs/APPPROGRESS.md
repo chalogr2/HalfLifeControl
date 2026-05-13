@@ -1101,6 +1101,48 @@ Random ("one-time tracking") pills now disappear from the dashboard *and* from S
 
 ---
 
+## Phase 4 Closeout + History Revamp + Orphan Dose Preservation (2026-05-13)
+
+### Context
+Phase 4 (notifications) had five spec lines from GAMEPLAN still open. This block closed all of them except the cron-driven background piece of `autoAssumeTaken` (deferred to Phase 5 so the Edge Function infrastructure ships once, alongside the RevenueCat webhook). The History page was also rebuilt around a self-contained day card, the daily detail page was removed, and the `doses` schema was migrated so one-off pill history survives the hard-delete that ends a one-time-tracking pill's lifecycle.
+
+### Phase 4 closeout — `src/services/notifications/index.ts`, `src/app/(main)/pill/add.tsx`
+- `every_n_days` frequency in add-pill: numeric "Take every N days" input with validation, plumbed through the existing scheduler.
+- Grouped notifications: `scheduleAllPillReminders` coalesces same-time pills by `(timeOfDay, weekday)` and the body lists every pill name in the group. `data.pillIds: string[]` replaces the prior single-pill payload; legacy `data.pillId` is still read by the response handler for back-compat.
+- Action handlers: a single `pill_reminder` category is registered at module load with **"Took it"** and **"Snooze 15min"** actions, both `opensAppToForeground: true` so the JS handler runs without needing a TaskManager background task.
+- Snooze: schedules a one-shot 15-minute `TIME_INTERVAL` reminder with the same payload + category.
+- `autoAssumeTaken` (foreground layer): Settings exposes the switch; `usePillStore.reconcileAutoAssumedDoses` walks active scheduled pills on cold-start `init` and on `AppState` foreground transitions, writes an `auto`-source dose at the previous scheduled time if one isn't already on record (`alreadyCovered` check via `takenAt >= prev`). `previousScheduledDose` returns null for `every_n_days` (no cycle anchor); reconcile skips those by design.
+- Dose-elimination notification (closes the last open Phase 4 spec line): `scheduleAllEliminationNotifications` schedules a one-shot DATE banner at each active dose's `eliminationAt`. Gated by `eliminationNotificationsEnabled` (default ON) with its own Settings switch.
+
+### Settings rework — `src/app/(main)/(tabs)/settings.tsx`
+- `ReminderMode` union narrowed from `'auto_start' | 'prompt' | 'simple'` to `'prompt' | 'simple' | 'off'`. The old `auto_start` option was redundant with the new `autoAssumeTaken` switch.
+- Options reordered (prompt, simple, off) and `prompt` is now the default. Legacy `auto_start` rows are normalized to `prompt` on read by `normalizeSettings` in `auth.ts` — no sign-out needed.
+- `autoAssumeTaken` locks the `prompt` row when on (greyed at 0.5 opacity, `accessibilityState.disabled`). Toggling on while `prompt` is selected drops the user to `simple`.
+- Scheduler decoupled from `autoAssumeTaken`: it now gates on `reminderMode`. `'off'` schedules nothing, `'simple'` schedules without a category (banner only; default tap doesn't double-record under autoAssume thanks to a `reminderMode` stamp on `data`), `'prompt'` attaches the `pill_reminder` category.
+- Renamed "Notifications off" → **"No reminder"**: the old label promised more than it delivered (it only silences scheduled-time reminders, not the independent dose-elimination toggle below).
+- Type sizes aligned: "Reminders" heading bumped `titleMd → titleLg` (matches Dashboard section headers), description `bodyMd → bodyLg` (matches the rest of Settings copy).
+
+### History revamp — `src/app/(main)/(tabs)/history.tsx`
+- Deleted `src/app/(main)/history/[date].tsx` and its `_layout.tsx`. The detail page carried a daily-completion ring that compared the day's doses against the *current* pill stack (wrong for past days) and a "Great Consistency!" achievement badge — neither survives.
+- Day cards are now self-contained: three colored circles for **pills taken** (primary), **medications** (secondary), and **one-offs** (tertiary amber), with white numbers inside. Underneath, the per-medication breakdown: color dot + drug name + either a single inline time or a collapsible row (count → expandable per-dose times) when 2+ doses for the same medication. `LayoutAnimation` smooths the expand/collapse on both platforms.
+- One-off classification: a dose is one-off if its `pillId` is null (orphan after migration 0004) or its current pill has `pillType === 'random'`. Scheduled pills only soft-delete, so an unresolvable lookup is by construction a past one-off.
+- Removed the Overall-Adherence summary card from the list header (it was a tracked-days percentage that read as consistency).
+- Stack registration removed from `src/app/(main)/_layout.tsx`; the `history/` folder is gone.
+- Title-to-content spacing matches Dashboard (24px below "History").
+
+### Orphan dose preservation — `supabase/migrations/0004_orphan_doses_on_pill_delete.sql`
+- `doses.pill_id` FK was `ON DELETE CASCADE`. Hard-deleting a one-off pill (`cleanupOrphanedRandomPills` → `hardDeletePill`) wiped its dose history server-side; only the local monthly cache (which `hardDeletePill` never pruned) was keeping it visible on the original device. A reinstall or second-device sign-in surfaced the loss.
+- Migration 0004 drops the cascade, makes `pill_id` nullable, and re-adds the FK with `ON DELETE SET NULL`. Postgres now orphans the dose rows in place when a pill is deleted.
+- WAL `hardDeletePill` handler no longer issues the explicit `DELETE FROM doses` — `SET NULL` covers it.
+- `Dose.pillId` is now `string | null`. `deserializeDose` coalesces missing values to null. The notifications scheduler guards against null before stamping payloads (unreachable in practice, since active doses always belong to a live pill). History groups orphans under `orphan:<drugName>` so multiple distinct deleted one-off pills don't collapse into one bucket; `lookupPillColor` falls back to the primary accent for missing pills.
+
+### Verification
+- `npx tsc --noEmit` clean after every block.
+- Migration 0004 applied manually in the Supabase SQL editor before the corresponding code was pushed (FK change had to land first or the new code would silently lose data through the still-cascading FK).
+- On-device test plan for the notification work is gated on EAS login + the first Android dev build (Phase 7); the wiring is correct per the response-handler traces but hasn't been confirmed in hardware.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission
