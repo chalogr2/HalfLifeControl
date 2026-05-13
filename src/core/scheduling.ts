@@ -79,54 +79,55 @@ function nextIntervalDose(hours: number, minutes: number, intervalDays: number, 
 }
 
 /**
- * Most recent past Date this schedule should have fired before `now`.
+ * Enumerate every scheduled occurrence in the open interval `(from, to]` for
+ * a given schedule. Used by the autoAssumeTaken reconciliation pass to find
+ * every dose that should have been recorded since the last anchor.
  *
- * Returns null for `every_n_days` schedules: without a stored "cycle anchor"
- * date on the pill, we can't tell which cycle we're in, so auto-assume
- * reconciliation is intentionally a no-op for that frequency. Daily +
- * specific-days callers always get a real Date.
+ * Returns `[]` for `every_n_days` schedules — they have no stored cycle
+ * anchor, so we can't enumerate occurrences without guessing. Daily and
+ * specific_days both walk the calendar day-by-day with a hard iteration
+ * cap so a pathological input can't spin forever.
+ *
+ * Occurrences are returned ascending by time.
  */
-export function previousScheduledDose(schedule: PillSchedule, now: Date = new Date()): Date | null {
+export function missedScheduledDoses(
+  schedule: PillSchedule,
+  from: Date,
+  to: Date,
+): Date[] {
+  if (from.getTime() >= to.getTime()) return [];
+  if (schedule.frequency === 'every_n_days') return [];
+
   const { hours, minutes } = parseTime(schedule.timeOfDay);
+  const results: Date[] = [];
 
-  if (schedule.frequency === 'daily') {
-    return previousDailyDose(hours, minutes, now);
+  // Start at `from`'s calendar day with the schedule's time-of-day. If that
+  // moment is at-or-before `from`, advance one day so we never emit the
+  // anchor itself (the open lower bound).
+  const cursor = new Date(from);
+  cursor.setHours(hours, minutes, 0, 0);
+  if (cursor.getTime() <= from.getTime()) {
+    cursor.setDate(cursor.getDate() + 1);
   }
 
-  if (schedule.frequency === 'specific_days' && schedule.daysOfWeek?.length) {
-    return previousSpecificDayDose(hours, minutes, schedule.daysOfWeek, now);
+  // Hard cap. ~2 years of daily walking is way past any realistic backfill;
+  // protects against malformed inputs (e.g. `to` set to a far-future date).
+  const MAX_ITERATIONS = 800;
+  let iterations = 0;
+
+  while (cursor.getTime() <= to.getTime() && iterations < MAX_ITERATIONS) {
+    if (schedule.frequency === 'daily') {
+      results.push(new Date(cursor));
+    } else if (schedule.frequency === 'specific_days' && schedule.daysOfWeek?.length) {
+      if (schedule.daysOfWeek.includes(cursor.getDay())) {
+        results.push(new Date(cursor));
+      }
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    iterations++;
   }
 
-  if (schedule.frequency === 'every_n_days') {
-    return null;
-  }
-
-  return previousDailyDose(hours, minutes, now);
-}
-
-function previousDailyDose(hours: number, minutes: number, now: Date): Date {
-  const today = new Date(now);
-  today.setHours(hours, minutes, 0, 0);
-  if (today.getTime() <= now.getTime()) return today;
-  today.setDate(today.getDate() - 1);
-  return today;
-}
-
-function previousSpecificDayDose(hours: number, minutes: number, daysOfWeek: number[], now: Date): Date {
-  // Walk back day-by-day up to a full week and pick the first match whose
-  // time-of-day has already passed. Bounded loop — never spins.
-  for (let offset = 0; offset < 8; offset++) {
-    const candidate = new Date(now);
-    candidate.setDate(candidate.getDate() - offset);
-    candidate.setHours(hours, minutes, 0, 0);
-    if (candidate.getTime() > now.getTime()) continue;
-    if (daysOfWeek.includes(candidate.getDay())) return candidate;
-  }
-  // Should be unreachable for non-empty daysOfWeek; safety fallback.
-  const fallback = new Date(now);
-  fallback.setDate(fallback.getDate() - 7);
-  fallback.setHours(hours, minutes, 0, 0);
-  return fallback;
+  return results;
 }
 
 /** Human-friendly schedule description. */

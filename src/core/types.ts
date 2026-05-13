@@ -82,6 +82,15 @@ export type ReminderMode = 'prompt' | 'simple' | 'off';
 
 export interface UserSettings {
   autoAssumeTaken: boolean;
+  /**
+   * ISO-8601 timestamp of when `autoAssumeTaken` was most recently flipped
+   * on, or null when the setting is currently off / has never been on. Used
+   * as the lower-bound anchor for `reconcileAutoAssumedDoses` — we never
+   * auto-record doses for time periods when the user hadn't opted in. Flips
+   * to null on `true → false`, and re-stamps to the current time on a
+   * fresh `false → true` (so toggling off and back on starts a new window).
+   */
+  autoAssumeTakenEnabledAt: string | null;
   notificationsEnabled: boolean;
   /**
    * If true, a one-shot banner fires when each active dose's

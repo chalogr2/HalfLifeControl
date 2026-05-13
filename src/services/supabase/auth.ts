@@ -132,6 +132,7 @@ export async function getUserProfile(
 function normalizeSettings(raw: unknown): UserSettings {
   const fallback: UserSettings = {
     autoAssumeTaken: false,
+    autoAssumeTakenEnabledAt: null,
     notificationsEnabled: true,
     eliminationNotificationsEnabled: true,
     reminderMode: 'prompt',
@@ -145,6 +146,12 @@ function normalizeSettings(raw: unknown): UserSettings {
       : 'prompt';
   return {
     autoAssumeTaken: typeof r.autoAssumeTaken === 'boolean' ? r.autoAssumeTaken : false,
+    // Legacy rows where autoAssumeTaken was set true before this field existed
+    // keep `null` here — the reconcile floor falls back to pill.createdAt,
+    // which honors the original contract ("we'll record for you since the
+    // pill was created").
+    autoAssumeTakenEnabledAt:
+      typeof r.autoAssumeTakenEnabledAt === 'string' ? r.autoAssumeTakenEnabledAt : null,
     notificationsEnabled:
       typeof r.notificationsEnabled === 'boolean' ? r.notificationsEnabled : true,
     eliminationNotificationsEnabled:

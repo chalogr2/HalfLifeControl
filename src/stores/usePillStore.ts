@@ -8,10 +8,11 @@ import {
   hardDeletePill as fbHardDeletePill,
   recordDose as fbRecordDose,
   updateDoseStatus as fbUpdateDoseStatus,
+  fetchDosesSince as fbFetchDosesSince,
   initializeDashboardIfNeeded,
 } from '@/services/supabase/pills';
 import { cancelPillReminders } from '@/services/notifications';
-import { previousScheduledDose } from '@/core/scheduling';
+import { missedScheduledDoses } from '@/core/scheduling';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 interface PillState {
@@ -62,11 +63,12 @@ interface PillState {
   dismissDose: (userId: string, doseId: string) => Promise<void>;
 
   /**
-   * Walk every active scheduled pill and write an auto dose for the most
-   * recent past scheduled time, if one isn't already on record. Used by the
+   * Walk every active scheduled pill and write auto doses for every missed
+   * scheduled occurrence since the per-pill anchor
+   * (`max(autoAssumeTakenEnabledAt, pill.createdAt)`). Used by the
    * autoAssumeTaken setting — runs on dashboard mount and on AppState
-   * foreground transitions. No-op for `every_n_days` schedules (see
-   * `previousScheduledDose` rationale).
+   * foreground transitions. No-op for `every_n_days` schedules (no stored
+   * cycle anchor, see `missedScheduledDoses`).
    */
   reconcileAutoAssumedDoses: (userId: string) => Promise<void>;
 
@@ -85,6 +87,11 @@ interface PillState {
    */
   cleanupOrphanedRandomPills: (userId: string) => Promise<void>;
 }
+
+// Module-level reentrancy guard for `reconcileAutoAssumedDoses`. Cold-start
+// `init` and the AppState foreground listener can both fire within
+// milliseconds; without the guard they'd race and double-insert.
+let reconcileInProgress: string | null = null;
 
 function applyDashboard(set: (partial: Partial<PillState>) => void, data: DashboardDocument) {
   const now = Date.now();
@@ -188,36 +195,102 @@ export const usePillStore = create<PillState>((set, get) => ({
   },
 
   reconcileAutoAssumedDoses: async (userId: string) => {
-    const settings = useAuthStore.getState().user?.settings;
-    if (!settings?.autoAssumeTaken) return;
+    // Per-user reentrancy guard. Cold-start `init` and the AppState
+    // foreground listener both call this, often within milliseconds of each
+    // other. Without the guard, both passes fetch the same dose list, both
+    // decide nothing is covered, and both insert duplicates.
+    if (reconcileInProgress === userId) return;
+    reconcileInProgress = userId;
 
-    const { pills, activeDoses } = get();
-    const now = new Date();
-    const cutoff = now.getTime() - 24 * 60 * 60 * 1000;
+    try {
+      const settings = useAuthStore.getState().user?.settings;
+      if (!settings?.autoAssumeTaken) return;
 
-    for (const pill of pills) {
-      if (pill.pillType !== 'scheduled' || !pill.isActive || !pill.schedule) continue;
+      const enabledAt = settings.autoAssumeTakenEnabledAt
+        ? new Date(settings.autoAssumeTakenEnabledAt)
+        : null;
 
-      const prev = previousScheduledDose(pill.schedule, now);
-      if (!prev) continue;
-      if (prev.getTime() < cutoff) continue;
+      const { pills } = get();
+      const now = new Date();
 
-      // Skip if the user (or a prior reconcile pass) already has any active
-      // dose for this pill at-or-after the most recent scheduled time. This
-      // covers both the manual-take-around-scheduled-time case and the
-      // already-reconciled case in a single check.
-      const alreadyCovered = activeDoses.some(
-        (d) => d.pillId === pill.id && d.takenAt.getTime() >= prev.getTime(),
-      );
-      if (alreadyCovered) continue;
-
-      try {
-        const { id, dashboard } = await fbRecordDose(userId, pill, prev, 'auto', prev);
-        void id;
-        applyDashboard(set, dashboard);
-      } catch {
-        // WAL retains the operation; next session will replay.
+      // Per-pill anchor = max(autoAssumeTakenEnabledAt, pill.createdAt). The
+      // first floor honors the setting's audit trail (don't backfill before
+      // the user opted in). The second prevents auto-recording occurrences
+      // that pre-date the pill's existence.
+      interface PillTask {
+        pill: Pill;
+        anchor: Date;
+        candidates: Date[];
       }
+      const tasks: PillTask[] = [];
+
+      for (const pill of pills) {
+        if (pill.pillType !== 'scheduled' || !pill.isActive || !pill.schedule) continue;
+
+        const anchorMs = Math.max(
+          pill.createdAt.getTime(),
+          enabledAt?.getTime() ?? 0,
+        );
+        const anchor = new Date(anchorMs);
+        if (anchor.getTime() >= now.getTime()) continue;
+
+        const candidates = missedScheduledDoses(pill.schedule, anchor, now);
+        if (candidates.length === 0) continue;
+
+        tasks.push({ pill, anchor, candidates });
+      }
+
+      if (tasks.length === 0) return;
+
+      // One batched fetch covering the union of all per-pill anchors. We
+      // then filter per-pill in JS — saves N round trips for N pills.
+      const earliestAnchor = new Date(
+        Math.min(...tasks.map((t) => t.anchor.getTime())),
+      );
+      const existing = await fbFetchDosesSince(userId, earliestAnchor);
+
+      const dosesByPill = new Map<string, Dose[]>();
+      for (const dose of existing) {
+        if (!dose.pillId) continue;
+        const arr = dosesByPill.get(dose.pillId) ?? [];
+        arr.push(dose);
+        dosesByPill.set(dose.pillId, arr);
+      }
+
+      for (const { pill, candidates } of tasks) {
+        const pillDoses = dosesByPill.get(pill.id) ?? [];
+
+        for (const candidate of candidates) {
+          const covered = pillDoses.some((d) => {
+            // Exact scheduledFor match (every auto-record stamps this).
+            if (
+              d.scheduledFor &&
+              Math.abs(d.scheduledFor.getTime() - candidate.getTime()) < 60_000
+            ) {
+              return true;
+            }
+            // ±30-min takenAt window covers manual records taken around the
+            // scheduled time (which don't carry a scheduledFor today).
+            return Math.abs(d.takenAt.getTime() - candidate.getTime()) < 30 * 60 * 1000;
+          });
+          if (covered) continue;
+
+          try {
+            const { dashboard } = await fbRecordDose(
+              userId,
+              pill,
+              candidate,
+              'auto',
+              candidate,
+            );
+            applyDashboard(set, dashboard);
+          } catch {
+            // WAL retains the operation; next session will replay.
+          }
+        }
+      }
+    } finally {
+      reconcileInProgress = null;
     }
   },
 

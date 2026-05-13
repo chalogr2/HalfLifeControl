@@ -67,9 +67,16 @@ export default function SettingsScreen() {
         ? 'simple'
         : user.settings.reminderMode;
     if (nextReminderMode !== reminderMode) setReminderMode(nextReminderMode);
+    // Stamp on `false → true`; clear on `true → false`. If the flag is
+    // already on (`true → true`, defensive), preserve the existing stamp
+    // so we don't artificially advance the reconcile anchor.
+    const nextEnabledAt = value
+      ? user.settings.autoAssumeTakenEnabledAt ?? new Date().toISOString()
+      : null;
     const nextSettings = {
       ...user.settings,
       autoAssumeTaken: value,
+      autoAssumeTakenEnabledAt: nextEnabledAt,
       reminderMode: nextReminderMode,
     };
     // Optimistic local-store update so dependent effects (notifications

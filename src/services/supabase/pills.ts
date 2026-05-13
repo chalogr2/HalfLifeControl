@@ -833,6 +833,29 @@ export async function fetchDosesByDateRange(
   return getDateRangeCachedDoses(uid, startDate, endDate);
 }
 
+/**
+ * Fetch every dose for `uid` taken at-or-after `since`, ordered ascending.
+ * Used by the autoAssumeTaken reconciliation pass to determine which
+ * scheduled occurrences are already covered. Returns the empty array on
+ * any network failure — reconcile will simply over-record on the next pass
+ * once the device is back online, and the `already-covered` check there
+ * de-duplicates against existing rows on re-fetch.
+ */
+export async function fetchDosesSince(uid: string, since: Date): Promise<Dose[]> {
+  try {
+    const { data, error } = await supabase
+      .from('doses')
+      .select('*')
+      .eq('user_id', uid)
+      .gte('taken_at', since.toISOString())
+      .order('taken_at', { ascending: true });
+    if (error || !data) return [];
+    return data.map(deserializeDose);
+  } catch {
+    return [];
+  }
+}
+
 /** Get all cached doses from monthly caches for the given date range. */
 async function getAllCachedDoses(uid: string, startDate: Date): Promise<Dose[]> {
   const now = new Date();
