@@ -181,17 +181,6 @@ export async function updateUserSettings(
   if (error) throw new Error(error.message);
 }
 
-export async function updateSubscriptionTier(
-  uid: string,
-  tier: 'free' | 'pro',
-): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ subscription_tier: tier })
-    .eq('id', uid);
-  if (error) throw new Error(error.message);
-}
-
 /**
  * Resolve `{ userId, email }` from a Supabase session, recovering from the
  * `userNotAvailableProxy` that auth-js installs when the encrypted user

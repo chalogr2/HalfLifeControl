@@ -9,7 +9,6 @@ export {
   getSession,
   completeOnboarding,
   updateUserSettings,
-  updateSubscriptionTier,
 } from './auth';
 export {
   loadDashboard,

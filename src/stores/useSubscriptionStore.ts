@@ -9,8 +9,6 @@ import {
   onSubscriptionChange,
   resetSubscriptions,
 } from '@/services/subscription';
-import { updateSubscriptionTier } from '@/services/supabase/auth';
-import { captureException } from '@/services/sentry';
 import type { PurchasesPackage } from 'react-native-purchases';
 
 /** Free tier limits (from GAMEPLAN spec). */
@@ -37,15 +35,12 @@ interface SubscriptionState {
 }
 
 let cleanupListener: (() => void) | null = null;
-let currentUserId: string | null = null;
 
-/**
- * Sync tier change to Supabase so the profile row stays current.
- * Fire-and-forget — don't block the UI on this write.
- */
-function syncTierToBackend(uid: string, tier: SubscriptionTier): void {
-  updateSubscriptionTier(uid, tier).catch(captureException);
-}
+// RevenueCat is the in-app source of truth for the user's tier. The
+// `profiles.subscription_tier` column is written exclusively by the
+// `revenuecat-webhook` Edge Function (Stage 2) and read by server-side
+// gates -- the client no longer writes to it from anywhere. See
+// migration 0005 for the column-level RLS lock that enforces this.
 
 export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   tier: 'free',
@@ -59,7 +54,6 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       cleanupListener = null;
     }
 
-    currentUserId = userId;
     set({ isLoading: true });
     try {
       await initSubscriptions(userId);
@@ -69,13 +63,9 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       ]);
       set({ tier, packages, isLoading: false });
 
-      // Sync initial tier to Firestore
-      syncTierToBackend(userId, tier);
-
       // Listen for future changes (single listener, cleaned up on reset)
       cleanupListener = onSubscriptionChange((newTier) => {
         set({ tier: newTier });
-        if (currentUserId) syncTierToBackend(currentUserId, newTier);
       });
     } catch {
       set({ tier: 'free', packages: [], isLoading: false });
@@ -87,7 +77,6 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       cleanupListener();
       cleanupListener = null;
     }
-    currentUserId = null;
     resetSubscriptions();
     set({ tier: 'free', packages: [], isLoading: true });
   },
@@ -95,7 +84,6 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   purchase: async (pkg: PurchasesPackage) => {
     const tier = await purchasePackage(pkg);
     set({ tier });
-    if (currentUserId) syncTierToBackend(currentUserId, tier);
   },
 
   restore: async () => {
@@ -103,7 +91,6 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       const tier = await restorePurchases();
       set({ tier, isLoading: false });
-      if (currentUserId) syncTierToBackend(currentUserId, tier);
     } catch {
       set({ isLoading: false });
     }
