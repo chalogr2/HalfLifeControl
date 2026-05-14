@@ -28,12 +28,14 @@ export default function PaywallScreen() {
   const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
   const [purchasing, setPurchasing] = useState(false);
 
-  // Find annual and monthly packages
+  // Find annual, monthly, and lifetime packages
   const annualPkg = packages.find((p) => p.packageType === 'ANNUAL') ?? null;
   const monthlyPkg = packages.find((p) => p.packageType === 'MONTHLY') ?? null;
+  const lifetimePkg = packages.find((p) => p.packageType === 'LIFETIME') ?? null;
 
-  // Default to annual if available
-  const activePkg = selectedPkg ?? annualPkg ?? monthlyPkg;
+  // Default to annual if available — it's the BEST VALUE tier we want to
+  // drive. Falls back to monthly, then lifetime if those aren't configured.
+  const activePkg = selectedPkg ?? annualPkg ?? monthlyPkg ?? lifetimePkg;
 
   const handlePurchase = useCallback(async () => {
     if (!activePkg) {
@@ -171,6 +173,41 @@ export default function PaywallScreen() {
               </View>
             </View>
           </Pressable>
+
+          {/* Lifetime — one-time purchase. Tertiary-amber accent on the
+              ONE-TIME tag matches the third pill color in PILL_COLORS,
+              keeping the palette coherent with the rest of the app. */}
+          <Pressable
+            style={[
+              styles.planCard,
+              activePkg === lifetimePkg && styles.planCardActive,
+            ]}
+            onPress={() => setSelectedPkg(lifetimePkg)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: activePkg === lifetimePkg }}
+            accessibilityLabel={`Lifetime plan, ${lifetimePkg ? lifetimePkg.product.priceString : '$99.99'} one-time payment`}
+          >
+            <View style={styles.oneTimeBadge}>
+              <Typography variant="labelSm" color="onPrimary">ONE-TIME</Typography>
+            </View>
+            <View style={styles.planRow}>
+              <View style={styles.radioOuter}>
+                {activePkg === lifetimePkg && <View style={styles.radioInner} />}
+              </View>
+              <View style={styles.planInfo}>
+                <Typography variant="titleMd">Lifetime Plan</Typography>
+                <Typography variant="labelMd" color="onSurfaceVariant">
+                  Pay once, own forever
+                </Typography>
+              </View>
+              <View style={styles.planPrice}>
+                <Typography variant="headlineMd" color="primary">
+                  {lifetimePkg ? lifetimePkg.product.priceString : '$99.99'}
+                </Typography>
+                <Typography variant="labelSm" color="onSurfaceVariant">one-time</Typography>
+              </View>
+            </View>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -271,6 +308,15 @@ const styles = StyleSheet.create({
     top: 0,
     right: 0,
     backgroundColor: colors.secondary,
+    borderBottomLeftRadius: borderRadius.lg,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+  },
+  oneTimeBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: colors.tertiary,
     borderBottomLeftRadius: borderRadius.lg,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],

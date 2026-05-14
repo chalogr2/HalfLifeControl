@@ -29,7 +29,9 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // header value configured in the RevenueCat dashboard.
 const WEBHOOK_AUTH = Deno.env.get('REVENUECAT_WEBHOOK_AUTH');
 
-const PRO_ENTITLEMENT_ID = 'pro';
+// Must match the Entitlement identifier configured in the RevenueCat
+// dashboard. RC entitlement identifiers are immutable once created.
+const PRO_ENTITLEMENT_ID = 'HalfLifeControl Pro';
 
 // Events that grant or refresh the entitlement -> tier = 'pro'.
 const GRANT_EVENTS = new Set([

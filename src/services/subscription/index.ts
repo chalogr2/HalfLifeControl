@@ -17,7 +17,11 @@ import type { SubscriptionTier } from '@/core/types';
 
 const APPLE_KEY = process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY ?? '';
 const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '';
-const ENTITLEMENT_ID = 'pro';
+// Must match the Entitlement identifier configured in the RevenueCat
+// dashboard. RevenueCat entitlement identifiers are immutable once created,
+// so any change here would require creating a new entitlement and
+// re-associating all products in the dashboard.
+const ENTITLEMENT_ID = 'HalfLifeControl Pro';
 
 let initialized = false;
 
