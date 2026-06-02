@@ -1143,6 +1143,49 @@ Phase 4 (notifications) had five spec lines from GAMEPLAN still open. This block
 
 ---
 
+## Phase 5 Backend: Webhook-Authoritative Subscriptions + Server-Side Limit (2026-06-02)
+
+### Context
+The original Phase 5 (line 614) shipped the RevenueCat client SDK, paywall, and a client-written `subscription_tier`. That left the tier trivially spoofable (any client could `UPDATE profiles SET subscription_tier='pro'`). This block makes the tier **webhook-authoritative** and moves the headline free-tier limit to a server-side trigger, plus an `autoAssumeTaken` reconcile rewrite. Apple/sandbox testing stays deferred (Phase 7 — no Mac, no dev build yet).
+
+### Stage 1 — autoAssumeTaken multi-occurrence reconcile (`f8e1215`)
+- Replaced the single-occurrence `previousScheduledDose` with `missedScheduledDoses(schedule, from, to)` in `scheduling.ts`, which enumerates *every* scheduled occurrence in `(from, to]` (daily / specific_days; `every_n_days` skipped — no cycle anchor), 800-iteration hard cap.
+- `reconcileAutoAssumedDoses` now backfills all missed doses since `max(pill.createdAt, autoAssumeTakenEnabledAt)` via one batched `fetchDosesSince` query, with a per-candidate coverage check (scheduledFor within 60s OR takenAt within 30min). Module-level `reconcileInProgress` guard prevents the cold-start + AppState-foreground race.
+- `autoAssumeTakenEnabledAt` added to `UserSettings` and stamped on the `false→true` settings toggle (cleared on `true→false`), so reconcile never backfills doses from before the user opted in. Dead `previousScheduledDose` helpers removed.
+
+### Stage 2 — Webhook-authoritative tier + RLS lock (`afceb7c`, migration 0005)
+- `supabase/functions/revenuecat-webhook/index.ts` (Deno Edge Function): verifies the `Authorization` header against `REVENUECAT_WEBHOOK_AUTH`, maps RC event types to `'pro'`/`'free'` (grant set vs. revoke set; `CANCELLATION` is a no-op — access persists until `EXPIRATION`), and writes `profiles.subscription_tier` via the service-role client.
+- Migration 0005 `revoke update (subscription_tier) on public.profiles from authenticated` — only `service_role` (the webhook) can mutate the column. The client reads it for server gates but RevenueCat's `getCustomerInfo` is the in-app source of truth.
+- Client cleanup: removed `updateSubscriptionTier` and all `syncTierToBackend` call sites from `useSubscriptionStore` / `auth.ts` — the client no longer writes the column from anywhere.
+- `tsconfig.json` excludes `supabase/functions` so Deno/JSR code doesn't break the Node typecheck.
+
+### Stage 2.5 — Entitlement wiring + Lifetime tile (`bdbc162`)
+- `ENTITLEMENT_ID` / `PRO_ENTITLEMENT_ID` set to the literal `'HalfLifeControl Pro'` (RC entitlement identifiers are immutable; only the display name is editable).
+- Paywall gained a third **Lifetime** tile ($99.99 one-time, `LIFETIME` package, tertiary-amber ONE-TIME badge).
+- `docs/REVENUECAT_SETUP.md` is the single source of truth for identifiers, products, keys, webhook deploy + smoke test, and the RLS-lock rationale.
+
+### Webhook deploy fix — `--no-verify-jwt` (`15990f5`)
+- The function was first deployed with Supabase's default gateway JWT verification ON. RevenueCat sends a custom `Authorization` header (our shared secret), **not** a Supabase JWT, so the gateway 401'd *every* webhook call before our code ran — a latent production-breaking bug.
+- Fixed by redeploying with `--no-verify-jwt` and pinning `verify_jwt = false` in new `supabase/config.toml` (`[functions.revenuecat-webhook]`) so future deploys keep it off. The function still authenticates each request itself.
+- **Verified live:** correct secret → `200 {tier:'pro'}`; wrong secret → `401`.
+
+### Stage 3 — Server-side scheduled-pill limit (`48b5d0c`, migration 0006)
+- `enforce_scheduled_pill_limit()` + `pills_enforce_scheduled_limit` trigger, `BEFORE INSERT OR UPDATE` on `pills`. Free tier capped at 1 **active scheduled** pill; pro unlimited; raises `check_violation` otherwise.
+- Counts only `is_active = true AND pill_type = 'scheduled'` excluding `NEW.id` — matches the client gate (soft-deleted pills don't consume the slot) and makes the trigger safe on UPDATE (editing an active scheduled pill counts zero others). Firing on UPDATE closes the random→scheduled and reactivation bypasses.
+- The **4-simultaneous random** limit stays client-only by design: it's dose-elimination-based (not a row count), and gating the hot `doses` INSERT path server-side would risk blocking legitimate dose recording for negligible gain.
+- Migration history was reconciled in passing: 0002–0005 had been applied via the dashboard SQL editor (which doesn't update the CLI's `schema_migrations` tracker), so `migration repair --status applied 0002 0003 0004 0005` recorded them before pushing 0006 alone.
+
+### Stage 4 — Foreground tier refresh (`b109a75`)
+- `refreshTier()` added to `useSubscriptionStore`, called from the existing root `AppState` foreground listener in `_layout.tsx`. The customer-info listener only fires while the app is open; this catches tier changes that landed (webhook / another device) while fully backgrounded. Reads RC's locally-cached `CustomerInfo`, so it's safe offline.
+- Real sandbox purchase test remains gated on an EAS Android dev build (Phase 7).
+
+### Verification
+- `npx tsc --noEmit` clean.
+- Webhook auth path verified live against the deployed function (200/401).
+- Migration 0006 applied to remote without error; the trigger's live *rejection* path is unverified from the dev environment (needs an authenticated user JWT) — confirmed by code review and gated behind the client check in practice.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission

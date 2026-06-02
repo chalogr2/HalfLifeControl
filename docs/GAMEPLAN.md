@@ -291,10 +291,10 @@ Key UX principles for elderly users:
 | Simultaneous random pill tracking | 4 | Unlimited |
 | All other features | Full access | Full access |
 
-- Enforced in `src/core/subscription.ts` (pure functions)
+- Enforced client-side in `src/stores/useSubscriptionStore.ts` (`canAddScheduledPill` / `canAddRandomPill`). The scheduled limit is additionally enforced server-side by the `pills_enforce_scheduled_limit` trigger (migration 0006) as an authoritative backstop; the random limit stays client-only (dose-elimination-based, not a row count).
 - Paywall shown during onboarding (adding 2nd scheduled pill) and on dashboard (hitting limits)
-- RevenueCat manages cross-platform purchases, webhook syncs tier to Supabase `profiles.subscription_tier` (via Edge Function in Phase 5)
-- Suggested pricing: $4.99/month or $39.99/year
+- RevenueCat manages cross-platform purchases. The `revenuecat-webhook` Edge Function is the **only** writer of `profiles.subscription_tier` (migration 0005 locks the column to `service_role`); the client reads RevenueCat's `getCustomerInfo` as its in-app source of truth.
+- Suggested pricing: $4.99/month, $39.99/year, or $99.99 lifetime (one-time)
 
 ---
 

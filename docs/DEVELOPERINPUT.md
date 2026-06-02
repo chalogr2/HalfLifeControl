@@ -55,9 +55,9 @@ Security is now enforced at the Postgres level via RLS policies that live in the
 
 Each policy covers all operations (SELECT, INSERT, UPDATE, DELETE) for the row's owner.
 
-**Pill limit enforcement** (free tier: 1 scheduled + 4 simultaneous random) lives in `src/core/subscription.ts` client-side for now. A Postgres `BEFORE INSERT` trigger for server-side enforcement is documented as a follow-up in `MIGRATIONTOSUPABASE.md` and will be added only if client-side bypass becomes a real concern.
+**Pill limit enforcement** (free tier: 1 scheduled + 4 simultaneous random) lives client-side in `src/stores/useSubscriptionStore.ts`. The **scheduled** limit is now also enforced server-side by the `pills_enforce_scheduled_limit` trigger (migration 0006). The **random** limit stays client-only by design (it's dose-elimination-based, not a row count).
 
-**Subscription tier syncing** (RevenueCat → `profiles.subscription_tier`) will be handled by a Supabase Edge Function in Phase 5. Until then, the client writes the tier directly — which works because the client is trusted at this stage. No webhook deployment is required for the initial migration.
+**Subscription tier syncing** (RevenueCat → `profiles.subscription_tier`) is handled by the `revenuecat-webhook` Supabase Edge Function (deployed). Migration 0005 locks the column to `service_role`, so the webhook is the **only** writer; the client never writes the tier and reads RevenueCat's `getCustomerInfo` as its in-app source of truth. See `docs/REVENUECAT_SETUP.md`.
 
 **Status**: [x] RLS applied via schema migration (verified in Section 8.5 of the migration guide)
 
@@ -191,27 +191,30 @@ Only non-sensitive metadata (the `lastSync` timestamp) remains unencrypted.
 | Snooze flow (15-minute reschedule) | [x] Done — Snooze schedules a one-shot 15-min reminder with the same payload |
 | `autoAssumeTaken` (foreground/local layer) | [x] Done — Settings toggle + `usePillStore.reconcileAutoAssumedDoses` writes auto doses on dashboard mount and `AppState` foreground transitions |
 | Dose-elimination notification ("dose has cleared") | [x] Done — `scheduleAllEliminationNotifications` schedules a one-shot DATE banner at each active dose's `eliminationAt`. Settings switch `eliminationNotificationsEnabled` (default ON) gates whether banners fire. |
-| `autoAssumeTaken` background cron (true app-closed coverage) | [ ] **Deferred to Phase 5** — requires Supabase Edge Function + scheduled cron, which is the same infrastructure RevenueCat tier sync needs. Building it once, in Phase 5. |
+| `autoAssumeTaken` background cron (true app-closed coverage) | [x] **Dropped, not built** — the foreground reconcile (`reconcileAutoAssumedDoses` on cold-start + every `AppState` foreground, with `missedScheduledDoses` backfilling *all* missed occurrences since the user opted in) covers the real-world need. A server cron would only matter for a user who never opens the app for days yet still wants doses auto-recorded — a contradiction, since the tier/UI only update on open anyway. Revisit only if user feedback shows a concrete gap. |
 
-**Status**: [x] Phase 4 closeout complete except for the cron-driven background piece of `autoAssumeTaken`, which is intentionally bundled with Phase 5 Edge Function work.
+**Status**: [x] Phase 4 closeout complete. The `autoAssumeTaken` server cron was evaluated during Phase 5 and intentionally dropped in favor of the foreground reconcile (see row above).
 
 ---
 
 ## NOT YET NEEDED (Future Phases)
 
-### Phase 5: Subscription (RevenueCat) — Code complete, needs account setup
+### Phase 5: Subscription (RevenueCat) — Wired end-to-end (Android); Apple deferred
 
-Code is built and gracefully degrades without API keys. You need to set up RevenueCat to enable real purchases:
+Code, webhook, RLS lock, and server-side limit are all done and **verified live** (webhook auth 200/401). Full reference: `docs/REVENUECAT_SETUP.md`.
 
 | Item | Status |
 |------|--------|
-| RevenueCat account created | [ ] |
-| Apple app added with shared secret | [ ] |
-| Android app added with service account | [ ] |
-| Products created (monthly $4.99, yearly $39.99) | [ ] |
-| Entitlement "pro" created in RevenueCat dashboard | [ ] |
-| `EXPO_PUBLIC_REVENUECAT_APPLE_KEY` in `.env` | [ ] |
-| `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` in `.env` | [ ] |
+| RevenueCat account + project created | [x] Done |
+| Android app added | [x] Done |
+| Products created (monthly $4.99, yearly $39.99, lifetime $99.99) | [x] Done |
+| Entitlement `HalfLifeControl Pro` (literal, immutable) created | [x] Done — code constants match in `subscription/index.ts` + webhook |
+| `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` in `.env` | [x] Done — test key |
+| `revenuecat-webhook` Edge Function deployed (`--no-verify-jwt`) | [x] Done |
+| `REVENUECAT_WEBHOOK_AUTH` secret set + matching RC dashboard webhook | [x] Done — smoke-tested |
+| Migration 0005 (lock tier) + 0006 (scheduled-pill trigger) applied | [x] Done |
+| Apple app + shared secret + `EXPO_PUBLIC_REVENUECAT_APPLE_KEY` | [ ] **Deferred to Phase 7** (no Mac) |
+| Production API key (swap test key) + real sandbox purchase test | [ ] **Gated on first EAS Android dev build** |
 
 ---
 

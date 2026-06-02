@@ -259,7 +259,14 @@ create trigger pills_touch
   for each row execute function public.touch_updated_at();
 ```
 
-This schema is intentionally minimal. Free-tier enforcement via trigger, edge functions for subscription webhooks, and realtime publication configuration will be added in follow-up migrations when those features land.
+This schema is intentionally minimal. The migration `0001` shown above is the baseline; later migrations layer on as features land:
+
+- **0002 / 0003** — duration-of-action columns and `duration_type`.
+- **0004** — `doses.pill_id` FK switched from `ON DELETE CASCADE` to `ON DELETE SET NULL` (nullable) so one-off dose history survives a pill hard-delete.
+- **0005** — `revoke update (subscription_tier) on public.profiles from authenticated`, making the `revenuecat-webhook` Edge Function (service-role) the sole writer of the subscription tier.
+- **0006** — `pills_enforce_scheduled_limit` `BEFORE INSERT OR UPDATE` trigger enforcing the free-tier 1-active-scheduled-pill cap server-side.
+
+Subscription webhook handling lives in `supabase/functions/revenuecat-webhook/` (deploy with `--no-verify-jwt`; see `docs/REVENUECAT_SETUP.md`). Realtime publication is still unused. Note that migrations 0002–0005 were originally applied via the dashboard SQL editor, so the CLI migration tracker was later reconciled with `supabase migration repair --status applied`.
 
 ---
 
