@@ -96,6 +96,9 @@ function AuthGate() {
       if (!uid) return;
       usePillStore.getState().cleanupOrphanedRandomPills(uid).catch(() => {});
       usePillStore.getState().reconcileAutoAssumedDoses(uid).catch(() => {});
+      // Re-pull subscription tier in case it changed (other device / webhook)
+      // while we were backgrounded.
+      useSubscriptionStore.getState().refreshTier().catch(() => {});
     });
     return () => sub.remove();
   }, []);

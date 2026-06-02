@@ -28,6 +28,8 @@ interface SubscriptionState {
   purchase: (pkg: PurchasesPackage) => Promise<void>;
   /** Restore previous purchases. */
   restore: () => Promise<void>;
+  /** Re-fetch the current tier from RevenueCat (e.g. on app foreground). */
+  refreshTier: () => Promise<void>;
   /** Check if the user can add another scheduled pill. */
   canAddScheduledPill: (currentScheduledCount: number) => boolean;
   /** Check if the user can track another random pill simultaneously. */
@@ -94,6 +96,19 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     } catch {
       set({ isLoading: false });
     }
+  },
+
+  // Pulls the latest tier from RevenueCat. The customer-info listener
+  // (set up in init) already catches changes while the app is open, but a
+  // foreground refresh covers cases the listener can miss -- e.g. a tier
+  // change that happened on another device or via the webhook while this
+  // app was fully backgrounded. getSubscriptionTier reads RevenueCat's
+  // locally-cached CustomerInfo, so it returns the last-known entitlement
+  // even offline (it only falls back to 'free' when RC isn't configured).
+  // The equality check just avoids a redundant store write / re-render.
+  refreshTier: async () => {
+    const next = await getSubscriptionTier();
+    if (next !== get().tier) set({ tier: next });
   },
 
   canAddScheduledPill: (currentScheduledCount: number) => {
