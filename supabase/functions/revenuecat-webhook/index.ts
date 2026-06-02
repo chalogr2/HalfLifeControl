@@ -11,14 +11,18 @@
  * not the DB row -- the DB row exists for server-side gates (e.g. the pill
  * limit trigger in Stage 3).
  *
- * Deploy:
- *   supabase functions deploy revenuecat-webhook
+ * Deploy (the --no-verify-jwt flag is REQUIRED — RevenueCat sends a custom
+ * Authorization header, not a Supabase JWT, so gateway JWT verification must be
+ * off or every webhook call 401s before this code runs; also pinned in
+ * supabase/config.toml so future deploys keep it off):
+ *   supabase functions deploy revenuecat-webhook --no-verify-jwt
  *   supabase secrets set REVENUECAT_WEBHOOK_AUTH=<random_string>
  *
  * Configure RevenueCat dashboard:
  *   Project Settings -> Integrations -> Webhooks
  *     URL:  https://<project-ref>.supabase.co/functions/v1/revenuecat-webhook
- *     Auth: Bearer <random_string>   // same value as REVENUECAT_WEBHOOK_AUTH
+ *     Auth: <random_string>   // EXACT same value as REVENUECAT_WEBHOOK_AUTH,
+ *                             // no "Bearer " prefix (we do a literal compare).
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 

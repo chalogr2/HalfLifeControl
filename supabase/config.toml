@@ -1,0 +1,18 @@
+# Supabase project config.
+#
+# This is intentionally minimal — the project is managed primarily through the
+# hosted dashboard and `supabase ... --project-ref`. The one setting that MUST
+# live here is the per-function JWT verification flag below.
+
+project_id = "hqottvptegdwxkoxacjc"
+
+# RevenueCat posts to this function with a custom `Authorization` header
+# (our shared webhook secret), NOT a Supabase JWT. Supabase's gateway verifies
+# JWTs by default and would 401 every RevenueCat call before our code runs.
+# Disabling gateway JWT verification lets the request reach the function, which
+# does its own auth check against REVENUECAT_WEBHOOK_AUTH (see index.ts).
+#
+# Without this, `supabase functions deploy revenuecat-webhook` would re-enable
+# JWT verification and silently break the webhook.
+[functions.revenuecat-webhook]
+verify_jwt = false

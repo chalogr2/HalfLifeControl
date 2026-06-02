@@ -56,9 +56,16 @@ Both are public-by-design and exposed to the JS bundle via the `EXPO_PUBLIC_` pr
 
 **Deploy:**
 ```bash
-supabase functions deploy revenuecat-webhook
+supabase functions deploy revenuecat-webhook --no-verify-jwt
 supabase secrets set REVENUECAT_WEBHOOK_AUTH=<random_string>
 ```
+
+> **`--no-verify-jwt` is mandatory.** RevenueCat sends a custom `Authorization`
+> header (our shared secret), not a Supabase JWT. Supabase's gateway verifies
+> JWTs by default and will `401` every webhook call *before* the function runs.
+> This is also pinned in `supabase/config.toml` (`verify_jwt = false`) so future
+> deploys keep it disabled. The function still authenticates every request
+> itself by comparing the header to `REVENUECAT_WEBHOOK_AUTH`.
 
 Generate the auth value with any opaque random generator. PowerShell:
 ```powershell
