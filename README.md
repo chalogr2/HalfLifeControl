@@ -1,6 +1,6 @@
 # HalfLifeControl
 
-A cross-platform mobile app that tracks how long a medication stays active in your body. You build a "pill stack" with your daily schedule, log each dose, and the app shows live countdowns based on the drug's half-life, how long it keeps working, and when it has cleared your system.
+A mobile app that tracks how long a medication stays active in your body. You build a "pill stack" with your daily schedule, log each dose, and the app shows live countdowns based on the drug's half-life, how long it keeps working, and when it has cleared your system.
 
 I built this as a portfolio project to show two things: that I can take a mobile app from an idea to a working product with a real backend, and how I work with AI coding agents to get there.
 
@@ -14,11 +14,18 @@ I built this as a portfolio project to show two things: that I can take a mobile
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/login.png" width="180" alt="Login screen"/><br/><sub>Login</sub></td>
-    <td align="center"><img src="docs/screenshots/dashboard.png" width="180" alt="Dashboard with live dose timers"/><br/><sub>Dashboard</sub></td>
-    <td align="center"><img src="docs/screenshots/addpill.png" width="180" alt="Add medication form"/><br/><sub>Add medication</sub></td>
-    <td align="center"><img src="docs/screenshots/history.png" width="180" alt="Dose history grouped by day"/><br/><sub>History</sub></td>
-    <td align="center"><img src="docs/screenshots/settings.png" width="180" alt="Reminder settings"/><br/><sub>Settings</sub></td>
+    <td width="20%" align="center"><img src="docs/screenshots/login.png" width="100%" alt="Login screen"/></td>
+    <td width="20%" align="center"><img src="docs/screenshots/dashboard.png" width="100%" alt="Dashboard with live dose timers"/></td>
+    <td width="20%" align="center"><img src="docs/screenshots/addpill.png" width="100%" alt="Add medication form"/></td>
+    <td width="20%" align="center"><img src="docs/screenshots/history.png" width="100%" alt="Dose history grouped by day"/></td>
+    <td width="20%" align="center"><img src="docs/screenshots/settings.png" width="100%" alt="Reminder settings"/></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Login</sub></td>
+    <td align="center"><sub>Dashboard</sub></td>
+    <td align="center"><sub>Add pill</sub></td>
+    <td align="center"><sub>History</sub></td>
+    <td align="center"><sub>Settings</sub></td>
   </tr>
 </table>
 
@@ -45,7 +52,11 @@ I built this as a portfolio project to show two things: that I can take a mobile
 | Data sources | DailyMed (FDA drug labels), PubChem, openFDA |
 | Testing | Jest (jest-expo) |
 
-The code is written once for both platforms. Development and testing were done on Android, and the iOS bundle builds from the same code.
+## Platform status
+
+HalfLifeControl was designed from the start to run on both Android and iOS, and the code is written once with that in mind. **In its current state it runs on Android only.** That's where it was built, tested and verified.
+
+The iOS version hasn't been built or tested yet. The app's JavaScript already bundles for iOS, but running it there still needs the native iOS project, a Mac to build and sign it, Apple's in-app purchase setup and Sign in with Apple. I set those aside to finish the Android version first.
 
 ## Engineering highlights
 
