@@ -1,6 +1,7 @@
 {
   "name": "halflifecontrol",
   "version": "1.0.0",
+  "license": "UNLICENSED",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -9,6 +10,15 @@
     "web": "expo start --web",
     "lint": "tsc --noEmit",
     "test": "jest"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/android/",
+      "/ios/",
+      "/supabase/"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -27,6 +37,7 @@
     "expo-secure-store": "~55.0.9",
     "expo-splash-screen": "~55.0.12",
     "expo-status-bar": "~55.0.4",
+    "expo-web-browser": "~55.0.20",
     "react": "^19.2.4",
     "react-native": "0.83.2",
     "react-native-gesture-handler": "~2.30.0",
@@ -43,7 +54,10 @@
   "devDependencies": {
     "@expo-google-fonts/lexend": "^0.4.1",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
+    "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
+    "jest": "~29.7.0",
+    "jest-expo": "~55.0.22",
     "supabase": "^2.85.0",
     "typescript": "~5.9.2"
   },

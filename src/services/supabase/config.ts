@@ -22,5 +22,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // PKCE: Google OAuth and password-reset redirects come back to the app as
+    // `halflifecontrol://...?code=<one-time code>`, exchanged on-device using
+    // the code-verifier held in SecureStore. Unlike the default implicit flow,
+    // no tokens ever appear in a redirect URL. See `completeAuthFromUrl`.
+    flowType: 'pkce',
   },
 });

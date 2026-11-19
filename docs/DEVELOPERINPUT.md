@@ -4,6 +4,8 @@ Everything in this document requires **your personal action** — creating accou
 
 > **Backend migration complete (2026-04)**: HalfLifeControl now runs on Supabase. The Firebase SDK, `functions/`, `firestore.rules`, and `firestore.indexes.json` have all been removed. **[`MIGRATIONTOSUPABASE.md`](./MIGRATIONTOSUPABASE.md)** is retained as a historical reference. Items 1–4 below have been rewritten around the new backend; everything else in this document (drug DB review, legal content, icons, EAS login, RevenueCat, Sentry, etc.) is unchanged.
 
+> **MVP scope decisions (2026-11-17)**: The app is a fully functional **portfolio demo** — it will not be published. Android is the run target; code stays iOS-compatible, but Apple services (Apple Sign-In, App Store products, Phase 7 submission) are out of scope. Decisions: **Google Sign-In** — build it (item 15). **openFDA** — proxy through a Supabase Edge Function (recommended over a consent prompt; pending final go-ahead). **Purchases** — set up a Google Play **internal testing** track for real sandbox purchases. **Sentry** — free Developer plan only. **Drug database medical review (item 8, data part)** — dropped; not needed for a demo.
+
 > **Final polish queue (deferred to end of development)**: items **8** (drug database half-life values + pill search refinement) and **10** (Terms of Service / Privacy Policy copy + openFDA third-party transmission disclosure) are deliberately held until the final polish pass after Phases 4–7 land. They are user-facing correctness/legal items whose final shape depends on the full feature set being frozen — touching them mid-development would force re-validation after every feature shift. Do not start them until prompted.
 
 ---
@@ -100,6 +102,20 @@ npx eas-cli login
 ```
 
 **Status**: [ ] Logged in
+
+### 7b. Deploy the `delete-account` Edge Function
+
+Settings → Delete Account calls this function. Until it is deployed the button
+shows "Could not delete your account". JWT verification stays ON (default):
+
+```bash
+supabase functions deploy delete-account
+```
+
+No secrets and no migration needed — deleting the `auth.users` row cascades to
+profiles, pills and doses (migration 0001).
+
+**Status**: [x] Deployed 2026-11-19 (verify JWT ON)
 
 ---
 
@@ -222,11 +238,30 @@ Code, webhook, RLS lock, and server-side limit are all done and **verified live*
 
 Sentry service code is built and gracefully degrades when DSN is not set. The original Firebase-based Google Sign-In was removed during the Supabase migration; a Supabase-OAuth replacement has not been built yet. Apple Sign-In is deferred to Phase 7 (no Mac).
 
-#### 15. Google Sign-In via Supabase OAuth (not yet implemented)
+#### 15. Google Sign-In via Supabase OAuth — code done, dashboard setup required
 
-The old Firebase Google Sign-In code (`src/services/firebase/googleAuth.ts`) was deleted during the April 2026 migration. Supabase supports Google OAuth natively, but the React Native flow is different from the old Firebase one — it requires deep-link configuration, redirect URI verification on physical devices, and session-restoration handling. This is tracked as a post-migration follow-up.
+Implemented as a browser-based PKCE flow (`src/services/supabase/googleAuth.ts` + `src/app/auth-callback.tsx`). It needs only **one "Web application" OAuth client** — no Android/iOS client IDs, no SHA-1 fingerprints — and the same code works on iOS.
 
-**Status**: [ ] Not yet implemented (post-migration follow-up)
+**A. Supabase redirect allow-list (also required for password reset, item 15b):**
+Supabase Dashboard → Authentication → URL Configuration → **Redirect URLs** → add `halflifecontrol://**`
+
+**B. Google Cloud Console** (console.cloud.google.com, any project):
+1. APIs & Services → **OAuth consent screen** → External → app name, support email → save. While in "Testing", add your own Google account under **Test users**.
+2. APIs & Services → **Credentials** → Create credentials → **OAuth client ID** → type **Web application**.
+3. Authorized redirect URIs → add `https://hqottvptegdwxkoxacjc.supabase.co/auth/v1/callback`
+4. Copy the **Client ID** and **Client secret**.
+
+**C. Supabase Dashboard** → Authentication → Sign In / Providers → **Google** → enable, paste Client ID + Client secret → save.
+
+**D. Rebuild once** (`npx expo run:android`) — `expo-web-browser` is a new native module.
+
+**Status**: [x] Code implemented / [ ] A. redirect URL added / [ ] B. Google OAuth client created / [ ] C. Supabase Google provider enabled / [ ] D. Rebuilt
+
+#### 15b. Password reset deep link — code done, needs the redirect URL from 15.A
+
+`resetPassword()` now sends `redirectTo: halflifecontrol://reset-password`; the email link opens `src/app/reset-password.tsx`, which exchanges the one-time code and lets the user set a new password. Without 15.A, Supabase ignores the redirect and the link opens the Site URL in a browser. Open the email **on the same phone** that requested it (PKCE keeps the verifier on-device).
+
+**Status**: [x] Code implemented / [ ] Redirect URL added (15.A)
 
 ---
 

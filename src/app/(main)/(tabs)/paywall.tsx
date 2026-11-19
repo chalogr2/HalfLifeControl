@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Typography, Button } from '@/components/ui';
+import { Typography, Button, ScreenHeader } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import type { PurchasesPackage } from 'react-native-purchases';
@@ -17,8 +17,8 @@ const FEATURES = [
     description: 'Track as many as-needed doses as you like.',
   },
   {
-    title: 'Future features sync',
-    description: 'Includes Apple Watch & Apple Health integration.',
+    title: 'Every future Pro feature',
+    description: 'New Pro features are included at no extra cost.',
   },
 ];
 
@@ -72,15 +72,20 @@ export default function PaywallScreen() {
   }, [restore, router]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Typography variant="titleMd" color="primary">HalfLifeControl</Typography>
+    // Lives in the tab navigator (hidden from the bar) so the bottom menu
+    // stays visible like every other page; top inset only, the tab bar owns
+    // the bottom edge.
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScreenHeader
+        title="HalfLifeControl"
+        onBack={() => router.back()}
+        right={
           <View style={styles.proBadge}>
             <Typography variant="labelSm" color="onPrimary">PRO</Typography>
           </View>
-        </View>
+        }
+      />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
         {/* Hero */}
         <Typography variant="headlineLg" style={styles.headline}>
@@ -246,20 +251,14 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[8],
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingTop: spacing[4],
-    marginBottom: spacing[6],
+    paddingBottom: spacing[8],
   },
   proBadge: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.md,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
   },
   headline: {
     marginBottom: spacing[2],
@@ -350,7 +349,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     paddingHorizontal: spacing[6],
-    paddingBottom: spacing[6],
+    paddingBottom: spacing[4],
     paddingTop: spacing[3],
     backgroundColor: colors.surface,
     gap: spacing[3],

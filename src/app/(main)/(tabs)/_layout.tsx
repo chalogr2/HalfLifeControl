@@ -6,6 +6,9 @@ import { colors, spacing } from '@/theme';
 export default function TabsLayout() {
   return (
     <Tabs
+      // Back (header arrow or Android key) returns to the tab you came from —
+      // e.g. Settings → Subscription → back lands on Settings, not Dashboard.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
@@ -41,6 +44,10 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Reached from Settings / the free-tier limit; hidden from the bar but
+          keeps the bar on screen so it navigates like any other page. */}
+      <Tabs.Screen name="paywall" options={{ href: null, title: 'Pro' }} />
+      <Tabs.Screen name="policies" options={{ href: null, title: 'Legal' }} />
     </Tabs>
   );
 }

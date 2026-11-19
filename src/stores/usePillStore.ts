@@ -18,6 +18,12 @@ import { useAuthStore } from '@/stores/useAuthStore';
 interface PillState {
   pills: Pill[];
   activeDoses: Dose[];
+  /**
+   * Doses recorded (or whose status changed) on this device since sign-in.
+   * The History tab fetches once and overlays this list, so a dose taken on
+   * the dashboard shows up immediately with no extra database read.
+   */
+  sessionDoses: Dose[];
   isLoading: boolean;
 
   /** Load from cache instantly, then sync from Supabase. */
@@ -65,10 +71,10 @@ interface PillState {
   /**
    * Walk every active scheduled pill and write auto doses for every missed
    * scheduled occurrence since the per-pill anchor
-   * (`max(autoAssumeTakenEnabledAt, pill.createdAt)`). Used by the
-   * autoAssumeTaken setting — runs on dashboard mount and on AppState
-   * foreground transitions. No-op for `every_n_days` schedules (no stored
-   * cycle anchor, see `missedScheduledDoses`).
+   * (`max(autoAssumeTakenEnabledAt, pill.createdAt, schedule.effectiveFrom)`).
+   * Used by the autoAssumeTaken setting — runs on dashboard mount and on
+   * AppState foreground transitions. `every_n_days` cycles are anchored on
+   * `schedule.startDate` (legacy rows: the pill's createdAt day).
    */
   reconcileAutoAssumedDoses: (userId: string) => Promise<void>;
 
@@ -93,6 +99,15 @@ interface PillState {
 // milliseconds; without the guard they'd race and double-insert.
 let reconcileInProgress: string | null = null;
 
+/** Insert or replace a dose (by id) in the session log. */
+function upsertSessionDose(list: Dose[], dose: Dose): Dose[] {
+  const idx = list.findIndex((d) => d.id === dose.id);
+  if (idx === -1) return [...list, dose];
+  const next = list.slice();
+  next[idx] = dose;
+  return next;
+}
+
 function applyDashboard(set: (partial: Partial<PillState>) => void, data: DashboardDocument) {
   const now = Date.now();
   set({
@@ -103,9 +118,25 @@ function applyDashboard(set: (partial: Partial<PillState>) => void, data: Dashbo
   });
 }
 
+/**
+ * recordDose returns the full dashboard with the new dose appended (before
+ * the active/eliminated filter), so the dose object is read from there —
+ * no extra cache or database read.
+ */
+function logRecordedDose(
+  set: (fn: (state: PillState) => Partial<PillState>) => void,
+  dashboard: DashboardDocument,
+  doseId: string,
+) {
+  const dose = dashboard.activeDoses.find((d) => d.id === doseId);
+  if (!dose) return;
+  set((state) => ({ sessionDoses: upsertSessionDose(state.sessionDoses, dose) }));
+}
+
 export const usePillStore = create<PillState>((set, get) => ({
   pills: [],
   activeDoses: [],
+  sessionDoses: [],
   isLoading: true,
 
   init: async (userId: string) => {
@@ -137,7 +168,7 @@ export const usePillStore = create<PillState>((set, get) => ({
   },
 
   reset: () => {
-    set({ pills: [], activeDoses: [], isLoading: true });
+    set({ pills: [], activeDoses: [], sessionDoses: [], isLoading: true });
   },
 
   addPill: async (userId, pill) => {
@@ -175,12 +206,20 @@ export const usePillStore = create<PillState>((set, get) => ({
   recordDose: async (userId, pill, takenAt, source, scheduledFor) => {
     const { id, dashboard } = await fbRecordDose(userId, pill, takenAt, source, scheduledFor);
     applyDashboard(set, dashboard);
+    logRecordedDose(set, dashboard, id);
     return id;
   },
 
   dismissDose: async (userId, doseId) => {
+    const before = get().activeDoses.find((d) => d.id === doseId)
+      ?? get().sessionDoses.find((d) => d.id === doseId);
     const dashboard = await fbUpdateDoseStatus(userId, doseId, 'dismissed');
     applyDashboard(set, dashboard);
+    if (before) {
+      set((state) => ({
+        sessionDoses: upsertSessionDose(state.sessionDoses, { ...before, status: 'dismissed' }),
+      }));
+    }
   },
 
   pruneExpiredDoses: () => {
@@ -227,14 +266,23 @@ export const usePillStore = create<PillState>((set, get) => ({
       for (const pill of pills) {
         if (pill.pillType !== 'scheduled' || !pill.isActive || !pill.schedule) continue;
 
+        // Third floor: the schedule's effectiveFrom. After an edit (e.g. 08:00
+        // → 07:00), past days would otherwise look "missed" at the new time —
+        // the ±30-min coverage check wouldn't match the old 08:00 doses — and
+        // we'd invent a duplicate dose for every past day.
+        const effectiveFromMs = pill.schedule.effectiveFrom
+          ? new Date(pill.schedule.effectiveFrom).getTime()
+          : 0;
         const anchorMs = Math.max(
           pill.createdAt.getTime(),
           enabledAt?.getTime() ?? 0,
+          Number.isNaN(effectiveFromMs) ? 0 : effectiveFromMs,
         );
         const anchor = new Date(anchorMs);
         if (anchor.getTime() >= now.getTime()) continue;
 
-        const candidates = missedScheduledDoses(pill.schedule, anchor, now);
+        // createdAt anchors legacy every-N-days schedules saved before startDate existed.
+        const candidates = missedScheduledDoses(pill.schedule, anchor, now, pill.createdAt);
         if (candidates.length === 0) continue;
 
         tasks.push({ pill, anchor, candidates });
@@ -276,7 +324,7 @@ export const usePillStore = create<PillState>((set, get) => ({
           if (covered) continue;
 
           try {
-            const { dashboard } = await fbRecordDose(
+            const { id, dashboard } = await fbRecordDose(
               userId,
               pill,
               candidate,
@@ -284,6 +332,7 @@ export const usePillStore = create<PillState>((set, get) => ({
               candidate,
             );
             applyDashboard(set, dashboard);
+            logRecordedDose(set, dashboard, id);
           } catch {
             // WAL retains the operation; next session will replay.
           }

@@ -109,10 +109,16 @@ function AuthGate() {
     const inAuthGroup = segments[0] === '(auth)';
     const inOnboardingGroup = segments[0] === '(onboarding)';
     const inLegalScreen = segments[0] === 'legal';
+    // Deep-link landing routes. Both start unauthenticated while the one-time
+    // code is exchanged, so they must not be bounced to login. Reset-password
+    // also stays put once authenticated (the user still has to type the new
+    // password); the OAuth callback forwards like a finished login.
+    const inResetPassword = segments[0] === 'reset-password';
+    const inAuthCallback = segments[0] === 'auth-callback';
 
-    if (!isAuthenticated && !inAuthGroup && !inLegalScreen) {
+    if (!isAuthenticated && !inAuthGroup && !inLegalScreen && !inResetPassword && !inAuthCallback) {
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
+    } else if (isAuthenticated && (inAuthGroup || inAuthCallback)) {
       if (user && !user.onboardingComplete) {
         router.replace('/(onboarding)/welcome');
       } else {

@@ -88,6 +88,9 @@ interface ReminderGroup {
   pills: Pill[];
 }
 
+/** One-shot reminders queued per every-N-days pill (see buildGroups). */
+const INTERVAL_OCCURRENCES_AHEAD = 4;
+
 function buildGroups(pills: Pill[]): ReminderGroup[] {
   const groups = new Map<string, ReminderGroup>();
   const now = new Date();
@@ -122,19 +125,26 @@ function buildGroups(pills: Pill[]): ReminderGroup[] {
 
     if (schedule.frequency === 'every_n_days' && schedule.intervalDays) {
       // expo-notifications has no "every N days" repeating trigger that lines
-      // up with a wall-clock time, so we schedule a one-shot DATE trigger for
-      // the next occurrence. The dashboard re-runs scheduleAllPillReminders
-      // whenever pills/doses change, which re-schedules the next one.
-      const next = nextScheduledDose(schedule, now);
-      const key = `interval-${pill.id}-${next.getTime()}`;
-      groups.set(key, {
-        key,
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: next,
-        },
-        pills: [pill],
-      });
+      // up with a wall-clock time, so we schedule one-shot DATE triggers for
+      // the next few occurrences. The dashboard re-runs scheduleAllPillReminders
+      // whenever pills/doses change, which tops the queue back up; scheduling
+      // several means reminders keep firing even if the app isn't opened for a
+      // few cycles. Kept small because iOS caps pending notifications at 64.
+      let cursor = now;
+      for (let i = 0; i < INTERVAL_OCCURRENCES_AHEAD; i++) {
+        // createdAt anchors legacy schedules saved before startDate existed.
+        const next = nextScheduledDose(schedule, cursor, pill.createdAt);
+        const key = `interval-${pill.id}-${next.getTime()}`;
+        groups.set(key, {
+          key,
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: next,
+          },
+          pills: [pill],
+        });
+        cursor = next;
+      }
     }
   }
 

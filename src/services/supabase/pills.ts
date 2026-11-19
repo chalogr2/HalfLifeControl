@@ -357,6 +357,28 @@ async function fetchDashboardFromSupabase(uid: string): Promise<DashboardDocumen
 
 // ─── Write-Ahead Log: Flush ─────────────────────────
 
+/**
+ * True when Postgres rejected the write for good — retrying the same payload
+ * can never succeed. Class 22 = invalid data, class 23 = constraint violation
+ * (CHECK, FK, NOT NULL, unique; also our 0006 pill-limit trigger), 42501 =
+ * RLS/permission. Network failures carry no SQLSTATE and stay retryable.
+ */
+function isPermanentWriteError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code !== 'string') return false;
+  return code.startsWith('22') || code.startsWith('23') || code === '42501';
+}
+
+/**
+ * Immediate (fire-and-forget) attempts run concurrently, so a foreign-key
+ * miss (23503) may just mean the parent row's insert is still in flight.
+ * Leave those for the ordered flush to decide; drop everything else
+ * permanent right away.
+ */
+function isPermanentOutOfOrder(err: unknown): boolean {
+  return isPermanentWriteError(err) && (err as { code?: string }).code !== '23503';
+}
+
 async function flushWriteQueue(uid: string): Promise<void> {
   const queue = await getWriteQueue(uid);
   if (queue.length === 0) return;
@@ -373,8 +395,19 @@ async function flushWriteQueue(uid: string): Promise<void> {
       }
       await executeOperation(uid, entry.operation);
       await dequeueWrite(uid, entry.id);
-    } catch {
-      // Still offline or DB error — leave in queue for next retry
+    } catch (err) {
+      // A rejected write must not stay queued: it would fail forever, and
+      // while anything is pending loadDashboard skips the server sync, so one
+      // bad row froze syncing entirely. Drop it — the next sync then replaces
+      // the optimistic local copy with what the server actually holds.
+      if (isPermanentWriteError(err)) {
+        captureException(err);
+        await dequeueWrite(uid, entry.id).catch(() => {});
+      }
+      // Otherwise still offline / transient — keep it and stop here, so
+      // later entries never run ahead of an earlier one they depend on
+      // (e.g. a dose whose pill insert hasn't landed yet).
+      else break;
     }
   }
 }
@@ -506,7 +539,10 @@ async function enqueueAndAttempt(
   // Fire-and-forget: WAL retries on failure
   executeOperation(uid, operation)
     .then(() => dequeueWrite(uid, entryId))
-    .catch(captureException);
+    .catch((err) => {
+      captureException(err);
+      if (isPermanentOutOfOrder(err)) dequeueWrite(uid, entryId).catch(() => {});
+    });
 }
 
 async function enqueueMultiple(
@@ -534,7 +570,10 @@ function attemptEnqueued(
   for (const { id, operation } of entries) {
     executeOperation(uid, operation)
       .then(() => dequeueWrite(uid, id))
-      .catch(captureException);
+      .catch((err) => {
+        captureException(err);
+        if (isPermanentOutOfOrder(err)) dequeueWrite(uid, id).catch(() => {});
+      });
   }
 }
 

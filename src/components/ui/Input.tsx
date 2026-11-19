@@ -14,7 +14,7 @@ interface InputProps extends TextInputProps {
  * - 2px bottom-bar using primary on focus
  * - Error state uses error color + errorContainer background
  */
-export function Input({ label, error, style, ...props }: InputProps) {
+export function Input({ label, error, style, onFocus, onBlur, ...props }: InputProps) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -36,15 +36,15 @@ export function Input({ label, error, style, ...props }: InputProps) {
           style,
         ]}
         placeholderTextColor={colors.onSurfaceVariant}
+        {...props}
         onFocus={(e) => {
           setFocused(true);
-          props.onFocus?.(e);
+          onFocus?.(e);
         }}
         onBlur={(e) => {
           setFocused(false);
-          props.onBlur?.(e);
+          onBlur?.(e);
         }}
-        {...props}
       />
       {error && (
         <Typography variant="bodySm" color="error" style={styles.errorText}>

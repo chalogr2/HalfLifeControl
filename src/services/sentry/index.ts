@@ -18,9 +18,12 @@ export function initSentry(): void {
 
   Sentry.init({
     dsn: DSN,
+    // Lets the Sentry dashboard filter emulator/dev noise from real builds.
+    environment: __DEV__ ? 'development' : 'production',
     tracesSampleRate: 0.2,
     enableAutoSessionTracking: true,
-    debug: __DEV__,
+    // SDK debug logging floods Metro; flip on only when debugging Sentry itself.
+    debug: false,
   });
 
   initialized = true;
@@ -42,6 +45,22 @@ export function captureException(error: unknown): void {
     return;
   }
   Sentry.captureException(error);
+}
+
+/** True once Sentry.init ran (a DSN is configured). */
+export function isSentryEnabled(): boolean {
+  return initialized;
+}
+
+/**
+ * Send a clearly-labelled test error and flush it right away, so the
+ * developer can confirm events reach the dashboard. Resolves to false when
+ * Sentry isn't configured.
+ */
+export async function sendTestError(): Promise<boolean> {
+  if (!initialized) return false;
+  Sentry.captureException(new Error(`Sentry test error (sent ${new Date().toISOString()})`));
+  return Sentry.flush();
 }
 
 export function captureMessage(message: string, level: Sentry.SeverityLevel = 'info'): void {

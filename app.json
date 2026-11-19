@@ -63,11 +63,12 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "SENTRY_ORG",
-          "project": "SENTRY_PROJECT"
+          "organization": "chalodev",
+          "project": "halflifecontrol"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {

@@ -7,7 +7,9 @@ import { PillCard } from '@/components/pills';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
-import { nextScheduledDose } from '@/core/scheduling';
+import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
+import { nextScheduledDose, formatNextDose } from '@/core/scheduling';
+import { latestActiveDose } from '@/core/doses';
 import {
   scheduleAllPillReminders,
   scheduleAllEliminationNotifications,
@@ -24,6 +26,8 @@ export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const { pills, activeDoses, recordDose, pruneExpiredDoses, hardDeletePill } = usePillStore();
+  const canAddScheduledPill = useSubscriptionStore((s) => s.canAddScheduledPill);
+  const canAddRandomPill = useSubscriptionStore((s) => s.canAddRandomPill);
 
   // Schedule notifications when pills or relevant settings change. Always
   // run (not gated on pills.length > 0) so removing the last pill also
@@ -112,9 +116,9 @@ export default function DashboardScreen() {
     const now = Date.now();
     return pills.filter((p) => {
       if (p.pillType !== 'random') return false;
-      const dose = activeDoses.find((d) => d.pillId === p.id);
       // Show if there's an active countdown, or if the pill was just added (no dose yet)
-      return !dose || dose.eliminationAt.getTime() > now;
+      const hasAnyDose = activeDoses.some((d) => d.pillId === p.id);
+      return !hasAnyDose || latestActiveDose(activeDoses, p.id, now) !== undefined;
     });
   }, [pills, activeDoses]);
 
@@ -126,24 +130,18 @@ export default function DashboardScreen() {
   }, [scheduledPills, randomPills]);
 
   const getActiveDose = useCallback(
-    (pillId: string): Dose | undefined => {
-      const dose = activeDoses.find((d) => d.pillId === pillId);
-      if (!dose) return undefined;
-      // Skip eliminated doses — allows re-tracking random pills
-      if (dose.eliminationAt.getTime() <= Date.now()) return undefined;
-      return dose;
-    },
+    // Newest non-eliminated dose; eliminated ones are skipped so random
+    // pills can be re-tracked.
+    (pillId: string): Dose | undefined => latestActiveDose(activeDoses, pillId),
     [activeDoses],
   );
 
   const getNextDoseLabel = useCallback((pill: Pill): string | undefined => {
     if (!pill.schedule) return undefined;
-    const next = nextScheduledDose(pill.schedule);
-    const h = next.getHours();
-    const m = next.getMinutes();
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 || 12;
-    return `Next dose: ${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    const now = new Date();
+    // createdAt anchors legacy every-N-days schedules saved before startDate existed.
+    const next = nextScheduledDose(pill.schedule, now, pill.createdAt);
+    return `Next dose: ${formatNextDose(next, now)}`;
   }, []);
 
   const handleTakePill = useCallback(
@@ -156,6 +154,21 @@ export default function DashboardScreen() {
       }
     },
     [user, recordDose],
+  );
+
+  // Free-tier check before opening the form (add.tsx re-checks on save), so
+  // nobody fills in a whole medication only to be sent to the paywall.
+  const openAddPill = useCallback(
+    (type: 'scheduled' | 'random') => {
+      const allowed =
+        type === 'scheduled'
+          ? canAddScheduledPill(scheduledPills.length)
+          : canAddRandomPill(
+              randomPills.filter((p) => latestActiveDose(activeDoses, p.id) !== undefined).length,
+            );
+      router.push(allowed ? `/(main)/pill/add?type=${type}` : '/(main)/(tabs)/paywall');
+    },
+    [canAddScheduledPill, canAddRandomPill, scheduledPills, randomPills, activeDoses, router],
   );
 
   const handlePillPress = useCallback(
@@ -183,15 +196,6 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Typography variant="headlineLg" color="primary">Dashboard</Typography>
-        <Pressable
-          style={styles.avatar}
-          accessibilityRole="button"
-          accessibilityLabel="User profile"
-        >
-          <Typography variant="labelLg" color="onPrimary">
-            {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
-          </Typography>
-        </Pressable>
       </View>
 
       <SectionList
@@ -210,7 +214,7 @@ export default function DashboardScreen() {
           section.title === 'My Daily Stack' ? (
             <Pressable
               style={styles.addToStack}
-              onPress={() => router.push('/(main)/pill/add?type=scheduled')}
+              onPress={() => openAddPill('scheduled')}
               accessibilityRole="button"
               accessibilityLabel="Add pill to stack"
             >
@@ -221,7 +225,7 @@ export default function DashboardScreen() {
           ) : section.title === 'One-Time Tracking' ? (
             <Pressable
               style={styles.addToStack}
-              onPress={() => router.push('/(main)/pill/add?type=random')}
+              onPress={() => openAddPill('random')}
               accessibilityRole="button"
               accessibilityLabel="Track another pill"
             >
@@ -251,14 +255,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[6],
     paddingTop: spacing[2],
     paddingBottom: 0,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   list: {
     paddingHorizontal: spacing[6],

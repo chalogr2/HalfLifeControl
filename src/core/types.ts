@@ -19,6 +19,18 @@ export interface PillSchedule {
   frequency: ScheduleFrequency;
   daysOfWeek?: number[]; // 0=Sun, 1=Mon, etc.
   intervalDays?: number;
+  /**
+   * Local calendar day ("YYYY-MM-DD") of the first occurrence in an
+   * `every_n_days` cycle. Occurrences fall on startDate + k × intervalDays.
+   * Optional for back-compat: legacy rows fall back to the pill's createdAt day.
+   */
+  startDate?: string;
+  /**
+   * ISO timestamp of when this schedule was created or last edited. The
+   * autoAssumeTaken reconcile never backfills occurrences before it, so editing
+   * a schedule can't retroactively invent doses under the new times.
+   */
+  effectiveFrom?: string;
 }
 
 export interface Pill {

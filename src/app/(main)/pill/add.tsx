@@ -2,24 +2,17 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Typography, Button, Input } from '@/components/ui';
-import { DrugSearchBar, type SearchResult } from '@/components/pills';
-import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
+import { Typography, Button, Input, ScreenHeader } from '@/components/ui';
+import { DrugSearchBar, ScheduleEditor, type SearchResult, type ScheduleEditorValue } from '@/components/pills';
+import { colors, spacing, borderRadius } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
-import { useSubscriptionStore, FREE_SCHEDULED_LIMIT, FREE_RANDOM_LIMIT } from '@/stores/useSubscriptionStore';
+import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
 import { completeOnboarding } from '@/services/supabase/auth';
 import { PILL_COLORS } from '@/core/pillColors';
-import type { PillType, ScheduleFrequency, DurationType, TimerType } from '@/core/types';
-
-const FREQUENCY_OPTIONS: { label: string; value: ScheduleFrequency | 'as_needed' }[] = [
-  { label: 'Every day', value: 'daily' },
-  { label: 'Specific days', value: 'specific_days' },
-  { label: 'Every N days', value: 'every_n_days' },
-  { label: 'As needed', value: 'as_needed' },
-];
-
-const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+import { buildSchedule } from '@/core/scheduling';
+import { parsePositiveNumber } from '@/core/numbers';
+import type { PillType, DurationType, PillSchedule } from '@/core/types';
 
 export default function AddPillScreen() {
   const router = useRouter();
@@ -55,26 +48,48 @@ export default function AddPillScreen() {
   const [pillType, setPillType] = useState<PillType>(
     params.type === 'random' ? 'random' : 'scheduled',
   );
-  const [frequency, setFrequency] = useState<ScheduleFrequency | 'as_needed'>('daily');
-  const [timeOfDay, setTimeOfDay] = useState('08:00');
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
-  const [intervalDays, setIntervalDays] = useState<string>('2');
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleEditorValue>({
+    frequency: 'daily',
+    timeOfDay: '08:00',
+    daysOfWeek: [],
+    intervalDays: '2',
+    intervalStart: 'today',
+  });
+  const frequency = scheduleDraft.frequency;
   const [selectedColor, setSelectedColor] = useState<string>(PILL_COLORS[0]);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [savedPillName, setSavedPillName] = useState('');
+  const [errors, setErrors] = useState<{ name?: string; halfLife?: string; dosage?: string }>({});
 
+  // parsePositiveNumber accepts "2,5" (Android keyboards in comma-decimal
+  // locales) — parseFloat read that as 2 and "0,5" as 0, which tripped the
+  // "Missing half-life" check even though the field was filled in.
+  const halfLifeValue = parsePositiveNumber(halfLife);
   const halfLifeMinutes =
-    halfLifeUnit === 'hours' ? parseFloat(halfLife || '0') * 60 : parseFloat(halfLife || '0');
+    halfLifeValue === null ? null : halfLifeUnit === 'hours' ? halfLifeValue * 60 : halfLifeValue;
 
-  const toggleDay = (day: number) => {
-    setDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-    );
-  };
+  // Typing in the search box (without tapping a suggestion) still names the
+  // pill. Editing the name after picking a curated drug turns it into a
+  // custom entry: the curated timing no longer applies, but the half-life
+  // stays pre-filled so the user can keep or change it.
+  const handleQueryChange = useCallback((text: string) => {
+    setDrugName(text);
+    setErrors((e) => ({ ...e, name: undefined }));
+    setHalfLifeSource((src) => {
+      if (src === 'curated') {
+        setDurationOfActionMinutes(null);
+        setDurationType('action');
+        setIsMaintenanceInterval(false);
+        setRequiresWeeklyWarning(false);
+      }
+      return 'manual';
+    });
+  }, []);
 
   const handleDrugSelect = useCallback((result: SearchResult) => {
     setDrugName(result.name);
+    setErrors({});
     if (result.drug) {
       // Curated — auto-fill half-life and dosage
       const hl = result.drug.halfLifeMinutes;
@@ -100,70 +115,73 @@ export default function AddPillScreen() {
     }
   }, []);
 
+  // Section badges are numbered from what's actually on screen: the
+  // half-life step only appears for custom drugs and the schedule step only
+  // for stack pills, so fixed numbers left gaps ("2, HL, 4").
+  const showHalfLife = halfLifeSource === 'manual';
+  const showSchedule = pillType !== 'random';
+  const stepHalfLife = 2;
+  const stepSchedule = showHalfLife ? 3 : 2;
+  const stepColor = 2 + (showHalfLife ? 1 : 0) + (showSchedule ? 1 : 0);
+
   const effectivePillType: PillType = pillType === 'random' ? 'random' : (frequency === 'as_needed' ? 'random' : 'scheduled');
 
   const handleSave = async () => {
     if (!user) return;
-    if (!drugName.trim()) {
-      Alert.alert('Missing name', 'Enter the drug name.');
-      return;
+    const nextErrors: typeof errors = {};
+    if (!drugName.trim()) nextErrors.name = 'Enter the drug name.';
+    if (halfLifeMinutes === null) {
+      nextErrors.halfLife = halfLife.trim()
+        ? 'Use a number greater than 0, e.g. 2.5'
+        : 'Enter the drug half-life.';
     }
-    if (halfLifeMinutes <= 0) {
-      Alert.alert('Missing half-life', 'Enter the drug half-life.');
-      return;
+    // Required: the database rejects dosage_mg <= 0 (pills_dosage_mg_check),
+    // and FDA search results carry no default dose to pre-fill.
+    const dosageValue = parsePositiveNumber(dosage);
+    if (dosageValue === null) {
+      nextErrors.dosage = dosage.trim() ? 'Use a number greater than 0, e.g. 200' : 'Enter the dose you take.';
     }
-
-    // Without at least one day, nextScheduledDose() silently degrades to daily
-    // while the notification scheduler creates zero reminders — same data row,
-    // two different effective schedules. Block at the entry point.
+    setErrors(nextErrors);
     if (
-      effectivePillType === 'scheduled' &&
-      frequency === 'specific_days' &&
-      daysOfWeek.length === 0
+      nextErrors.name ||
+      nextErrors.halfLife ||
+      nextErrors.dosage ||
+      halfLifeMinutes === null ||
+      dosageValue === null
     ) {
       Alert.alert(
-        'Pick at least one day',
-        'Select which days of the week you take this medication.',
+        'Check the form',
+        nextErrors.name ?? nextErrors.halfLife ?? nextErrors.dosage ?? 'Some fields need attention.',
       );
       return;
     }
 
-    const parsedIntervalDays = parseInt(intervalDays, 10);
-    if (
-      effectivePillType === 'scheduled' &&
-      frequency === 'every_n_days' &&
-      (!Number.isFinite(parsedIntervalDays) || parsedIntervalDays < 1)
-    ) {
-      Alert.alert(
-        'Pick an interval',
-        'Enter a whole number of days (1 or more) between doses.',
-      );
-      return;
+    // Validation (time format, at least one weekday, sane interval) lives in
+    // core/scheduling so the edit-schedule flow enforces the exact same rules.
+    const isScheduled = effectivePillType === 'scheduled';
+    let schedule: PillSchedule | null = null;
+    if (isScheduled && frequency !== 'as_needed') {
+      const built = buildSchedule({ ...scheduleDraft, frequency });
+      if (!built.ok) {
+        Alert.alert(built.title, built.message);
+        return;
+      }
+      schedule = built.schedule;
     }
 
     // Free tier gate: check limits by pill type
-    const isScheduled = effectivePillType === 'scheduled';
     if (isScheduled && !canAddScheduledPill(scheduledCount)) {
-      router.push('/(main)/subscription/paywall');
+      router.navigate('/(main)/(tabs)/paywall');
       return;
     }
     if (!isScheduled && !canAddRandomPill(randomCount)) {
-      router.push('/(main)/subscription/paywall');
+      router.navigate('/(main)/(tabs)/paywall');
       return;
     }
 
     setSaving(true);
     try {
-      const schedule = isScheduled
-        ? {
-            timeOfDay,
-            frequency: frequency as ScheduleFrequency,
-            ...(frequency === 'specific_days' ? { daysOfWeek } : {}),
-            ...(frequency === 'every_n_days' ? { intervalDays: parsedIntervalDays } : {}),
-          }
-        : null;
-
-      const pillId = await addPill(user.uid, {
+      await addPill(user.uid, {
         drugName: drugName.trim(),
         drugId: '',
         halfLifeMinutes,
@@ -172,7 +190,7 @@ export default function AddPillScreen() {
         durationType,
         isMaintenanceInterval,
         requiresWeeklyWarning,
-        dosageMg: parseFloat(dosage) || 0,
+        dosageMg: dosageValue,
         dosageUnit,
         pillType: effectivePillType,
         schedule,
@@ -209,20 +227,8 @@ export default function AddPillScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScreenHeader title="Add Medication" variant="close" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel and go back"
-          >
-            <Typography variant="bodyLg" color="primary">Cancel</Typography>
-          </Pressable>
-          <Typography variant="titleLg">Add Medication</Typography>
-          <View style={{ width: 50 }} />
-        </View>
 
         {/* Title */}
         <Typography variant="headlineMd" color="primary" style={styles.title}>
@@ -233,13 +239,17 @@ export default function AddPillScreen() {
         </Typography>
 
         {/* Drug Search */}
-        <DrugSearchBar onSelect={handleDrugSelect} />
+        <DrugSearchBar
+          onSelect={handleDrugSelect}
+          onQueryChange={handleQueryChange}
+          error={errors.name}
+        />
 
         {/* Dosage section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionIcon}>
-              <Typography variant="labelMd" color="onPrimary">2</Typography>
+              <Typography variant="labelMd" color="onPrimary">1</Typography>
             </View>
             <Typography variant="titleMd" color="primary">Dosage</Typography>
           </View>
@@ -250,10 +260,14 @@ export default function AddPillScreen() {
             <View style={{ flex: 2 }}>
               <Input
                 label=""
-                placeholder="85"
+                placeholder="e.g. 20"
                 value={dosage}
-                onChangeText={setDosage}
-                keyboardType="numeric"
+                onChangeText={(t) => {
+                  setDosage(t);
+                  setErrors((e) => ({ ...e, dosage: undefined }));
+                }}
+                keyboardType="decimal-pad"
+                error={errors.dosage}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -268,11 +282,11 @@ export default function AddPillScreen() {
         </View>
 
         {/* Half-life (only if manual) */}
-        {halfLifeSource === 'manual' && (
+        {showHalfLife && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
-                <Typography variant="labelMd" color="onPrimary">HL</Typography>
+                <Typography variant="labelMd" color="onPrimary">{stepHalfLife}</Typography>
               </View>
               <Typography variant="titleMd" color="primary">Half-Life</Typography>
             </View>
@@ -282,8 +296,12 @@ export default function AddPillScreen() {
                   label=""
                   placeholder={halfLifeUnit === 'hours' ? '2.5' : '150'}
                   value={halfLife}
-                  onChangeText={setHalfLife}
-                  keyboardType="numeric"
+                  onChangeText={(t) => {
+                    setHalfLife(t);
+                    setErrors((e) => ({ ...e, halfLife: undefined }));
+                  }}
+                  keyboardType="decimal-pad"
+                  error={errors.halfLife}
                 />
               </View>
               <View style={styles.unitToggle}>
@@ -321,104 +339,16 @@ export default function AddPillScreen() {
         )}
 
         {/* Schedule section — only for stack (scheduled) pills */}
-        {pillType !== 'random' && (
+        {showSchedule && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
-                <Typography variant="labelMd" color="onPrimary">3</Typography>
+                <Typography variant="labelMd" color="onPrimary">{stepSchedule}</Typography>
               </View>
               <Typography variant="titleMd" color="primary">Schedule</Typography>
             </View>
 
-            {/* Frequency toggles */}
-            <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-              Frequency
-            </Typography>
-            <View style={styles.freqRow}>
-              {FREQUENCY_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  style={[styles.freqBtn, frequency === opt.value && styles.freqBtnActive]}
-                  onPress={() => setFrequency(opt.value)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: frequency === opt.value }}
-                  accessibilityLabel={opt.label}
-                >
-                  <Typography
-                    variant="labelMd"
-                    color={frequency === opt.value ? 'onPrimary' : 'onSurfaceVariant'}
-                  >
-                    {opt.label}
-                  </Typography>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Interval input for every-N-days */}
-            {frequency === 'every_n_days' && (
-              <>
-                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-                  Take every
-                </Typography>
-                <View style={styles.row}>
-                  <View style={{ flex: 2 }}>
-                    <Input
-                      label=""
-                      placeholder="2"
-                      value={intervalDays}
-                      onChangeText={setIntervalDays}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={{ flex: 1, justifyContent: 'center' }}>
-                    <Typography variant="bodyLg" color="onSurfaceVariant">days</Typography>
-                  </View>
-                </View>
-              </>
-            )}
-
-            {/* Day picker for specific days */}
-            {frequency === 'specific_days' && (
-              <>
-                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-                  Select Days
-                </Typography>
-                <View style={styles.dayRow}>
-                  {DAY_LABELS.map((label, i) => (
-                    <Pressable
-                      key={i}
-                      style={[styles.dayBtn, daysOfWeek.includes(i) && styles.dayBtnActive]}
-                      onPress={() => toggleDay(i)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: daysOfWeek.includes(i) }}
-                      accessibilityLabel={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]}
-                    >
-                      <Typography
-                        variant="labelMd"
-                        color={daysOfWeek.includes(i) ? 'onPrimary' : 'onSurfaceVariant'}
-                      >
-                        {label}
-                      </Typography>
-                    </Pressable>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Reminder time */}
-            {frequency !== 'as_needed' && (
-              <>
-                <Typography variant="bodyMd" color="onSurfaceVariant" style={styles.sectionSub}>
-                  Reminder Time
-                </Typography>
-                <Input
-                  label=""
-                  placeholder="08:00"
-                  value={timeOfDay}
-                  onChangeText={setTimeOfDay}
-                />
-              </>
-            )}
+            <ScheduleEditor value={scheduleDraft} onChange={setScheduleDraft} allowAsNeeded />
           </View>
         )}
 
@@ -426,7 +356,7 @@ export default function AddPillScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionIcon}>
-              <Typography variant="labelMd" color="onPrimary">4</Typography>
+              <Typography variant="labelMd" color="onPrimary">{stepColor}</Typography>
             </View>
             <Typography variant="titleMd" color="primary">Pill Color</Typography>
           </View>
@@ -495,12 +425,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[6],
     paddingTop: spacing[4],
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing[4],
-  },
   title: {
     marginBottom: spacing[1],
   },
@@ -547,39 +471,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
   },
   unitBtnActive: {
-    backgroundColor: colors.primary,
-  },
-  freqRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    marginBottom: spacing[3],
-  },
-  freqBtn: {
-    flex: 1,
-    height: MIN_TOUCH_TARGET,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  freqBtnActive: {
-    backgroundColor: colors.primary,
-  },
-  dayRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    justifyContent: 'space-between',
-    marginBottom: spacing[3],
-  },
-  dayBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  dayBtnActive: {
     backgroundColor: colors.primary,
   },
   colorRow: {

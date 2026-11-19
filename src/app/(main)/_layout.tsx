@@ -14,10 +14,6 @@ export default function MainLayout() {
         name="pill"
         options={{ presentation: 'modal' }}
       />
-      <Stack.Screen
-        name="subscription"
-        options={{ presentation: 'modal' }}
-      />
     </Stack>
   );
 }

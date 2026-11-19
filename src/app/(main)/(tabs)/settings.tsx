@@ -1,13 +1,31 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert, Switch } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Typography, Card } from '@/components/ui';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSubscriptionStore } from '@/stores/useSubscriptionStore';
-import { signOut, updateUserSettings } from '@/services/supabase/auth';
+import { signOut, deleteAccount, updateUserSettings } from '@/services/supabase/auth';
+import { isTestStore, type ProPlan } from '@/services/subscription';
+import { isSentryEnabled, sendTestError } from '@/services/sentry';
 import type { ReminderMode } from '@/core/types';
+
+const PLAN_LABELS: Record<ProPlan, string> = {
+  monthly: 'Monthly plan',
+  annual: 'Annual plan',
+  lifetime: 'Lifetime plan',
+};
+
+/** "Nov 18, 3:45 PM" — Test Store periods are minutes long, so include the time. */
+function formatAccessDate(d: Date): string {
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 const REMINDER_OPTIONS: { value: ReminderMode; title: string; description: string }[] = [
   {
@@ -31,6 +49,9 @@ export default function SettingsScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const tier = useSubscriptionStore((s) => s.tier);
+  const proStatus = useSubscriptionStore((s) => s.status);
+  const cancelledUntil = useSubscriptionStore((s) => s.cancelledUntil);
+  const [deleting, setDeleting] = React.useState(false);
   const [reminderMode, setReminderMode] = React.useState<ReminderMode>(
     (user?.settings?.reminderMode as ReminderMode) ?? 'prompt',
   );
@@ -92,6 +113,87 @@ export default function SettingsScreen() {
     useAuthStore.getState().setUser({ ...user, settings: nextSettings });
     updateUserSettings(user.uid, nextSettings);
   }, [user]);
+
+  const isLifetime = proStatus?.plan === 'lifetime';
+  // Cancelled in the real store (willRenew false) or via the Test Store simulation.
+  const accessEndsAt: Date | null =
+    cancelledUntil ?? (proStatus && !proStatus.willRenew && !isLifetime ? proStatus.expiresAt : null);
+
+  const handleUnsubscribe = useCallback(() => {
+    const until = proStatus?.expiresAt;
+    const testStore = isTestStore();
+    Alert.alert(
+      'Cancel Pro?',
+      testStore
+        ? `You'll keep Pro until ${until ? formatAccessDate(until) : 'the end of this period'}, then your account switches to the Free plan.\n\n(Test mode: this simulates a store cancellation.)`
+        : "Subscriptions are managed by Google Play. You'll be taken there to cancel; Pro stays active until the end of the period you paid for.",
+      [
+        { text: 'Keep Pro', style: 'cancel' },
+        {
+          text: testStore ? 'Cancel Pro' : 'Open Google Play',
+          style: 'destructive',
+          onPress: () => {
+            useSubscriptionStore.getState().unsubscribe().catch((e: unknown) => {
+              Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Please try again.');
+            });
+          },
+        },
+      ],
+    );
+  }, [proStatus]);
+
+  const handleResume = useCallback(() => {
+    useSubscriptionStore.getState().resumeSubscription().catch(() => {});
+  }, []);
+
+  const handleDeleteAccount = useCallback(() => {
+    const runDelete = async () => {
+      setDeleting(true);
+      try {
+        await deleteAccount();
+        // Sign-out fires onAuthStateChange -> stores reset -> gate shows login.
+        Alert.alert('Account deleted', 'Your account and all of its data have been removed.');
+      } catch (e: unknown) {
+        Alert.alert('Delete failed', e instanceof Error ? e.message : 'Please try again.');
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    const renewing = tier === 'pro' && !isLifetime && !accessEndsAt && !isTestStore();
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account, medications and dose history from every device. It cannot be undone.' +
+        (renewing ? '\n\nYour Google Play subscription is not cancelled automatically — cancel it in Google Play to stop billing.' : ''),
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Are you absolutely sure?', 'All of your data will be erased.', [
+              { text: 'Keep my account', style: 'cancel' },
+              { text: 'Delete forever', style: 'destructive', onPress: runDelete },
+            ]),
+        },
+      ],
+    );
+  }, [tier, isLifetime, accessEndsAt]);
+
+  // Dev-only: confirms crash reporting reaches the Sentry dashboard.
+  const handleSentryTest = useCallback(async () => {
+    if (!isSentryEnabled()) {
+      Alert.alert('Sentry is off', 'EXPO_PUBLIC_SENTRY_DSN is empty. Add it to .env and restart Metro with --clear.');
+      return;
+    }
+    const sent = await sendTestError().catch(() => false);
+    Alert.alert(
+      sent ? 'Test error sent' : 'Not confirmed',
+      sent
+        ? 'Check Sentry → Issues (environment: development) in about a minute.'
+        : 'Sentry did not confirm delivery. Check your connection and the DSN.',
+    );
+  }, []);
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -202,7 +304,7 @@ export default function SettingsScreen() {
         {tier === 'free' ? (
           <Pressable
             style={styles.proCard}
-            onPress={() => router.push('/(main)/subscription/paywall')}
+            onPress={() => router.push('/(main)/(tabs)/paywall')}
             accessibilityRole="button"
             accessibilityLabel="Upgrade to Pro. Unlock unlimited scheduled pills and future features."
           >
@@ -216,20 +318,54 @@ export default function SettingsScreen() {
           </Pressable>
         ) : (
           <Card variant="elevated" style={styles.proActiveCard}>
-            <View style={styles.proBadge}>
-              <Typography variant="labelSm" color="onPrimary">PRO</Typography>
+            <View style={styles.proActiveRow}>
+              <View style={styles.proActiveContent}>
+                <View style={styles.proBadge}>
+                  <Typography variant="labelSm" color="onPrimary">PRO</Typography>
+                </View>
+                <Typography variant="titleMd">
+                  {accessEndsAt ? 'Pro Plan Cancelled' : 'Pro Plan Active'}
+                </Typography>
+                <Typography variant="bodyLg" color="onSurfaceVariant">
+                  {isLifetime
+                    ? 'Lifetime plan · yours forever.'
+                    : accessEndsAt
+                      ? `Pro until ${formatAccessDate(accessEndsAt)}.`
+                      : `${proStatus?.plan ? PLAN_LABELS[proStatus.plan] : 'Subscription'}${
+                          proStatus?.expiresAt ? ` · renews ${formatAccessDate(proStatus.expiresAt)}` : ''
+                        }`}
+                </Typography>
+              </View>
+              {/* Lifetime is a one-time purchase: nothing renews, nothing to cancel. */}
+              {!isLifetime && (
+                cancelledUntil ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.planActionBtn, pressed && styles.pressed]}
+                    onPress={handleResume}
+                    accessibilityRole="button"
+                    accessibilityLabel="Resume Pro subscription"
+                  >
+                    <Typography variant="labelLg" color="primary">Resume</Typography>
+                  </Pressable>
+                ) : !accessEndsAt ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.planActionBtn, pressed && styles.pressed]}
+                    onPress={handleUnsubscribe}
+                    accessibilityRole="button"
+                    accessibilityLabel="Unsubscribe from Pro"
+                  >
+                    <Typography variant="labelLg" color="error">Unsubscribe</Typography>
+                  </Pressable>
+                ) : null
+              )}
             </View>
-            <Typography variant="titleMd">Pro Plan Active</Typography>
-            <Typography variant="bodyLg" color="onSurfaceVariant">
-              You have access to all features.
-            </Typography>
           </Card>
         )}
 
         {/* Legal */}
         <Pressable
           style={styles.legalBtn}
-          onPress={() => router.push({ pathname: '/legal', params: { type: 'terms', from: 'settings' } })}
+          onPress={() => router.push({ pathname: '/(main)/(tabs)/policies', params: { type: 'terms' } })}
           accessibilityRole="button"
           accessibilityLabel="Terms of Service"
         >
@@ -239,7 +375,7 @@ export default function SettingsScreen() {
 
         <Pressable
           style={styles.legalBtn}
-          onPress={() => router.push({ pathname: '/legal', params: { type: 'privacy', from: 'settings' } })}
+          onPress={() => router.push({ pathname: '/(main)/(tabs)/policies', params: { type: 'privacy' } })}
           accessibilityRole="button"
           accessibilityLabel="Privacy Policy"
         >
@@ -262,6 +398,35 @@ export default function SettingsScreen() {
           accessibilityLabel="Sign out"
         >
           <Typography variant="labelLg" color="error">Sign Out</Typography>
+        </Pressable>
+
+        {__DEV__ && (
+          <Pressable
+            style={({ pressed }) => [styles.devBtn, pressed && styles.pressed]}
+            onPress={handleSentryTest}
+            accessibilityRole="button"
+            accessibilityLabel="Send a test error to Sentry"
+          >
+            <Typography variant="labelMd" color="onSurfaceVariant">
+              Developer: send test error to Sentry
+            </Typography>
+          </Pressable>
+        )}
+
+        {/* Delete account — two-step confirm, irreversible */}
+        <Pressable
+          style={({ pressed }) => [styles.deleteBtn, (pressed || deleting) && styles.pressed]}
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+          accessibilityState={{ busy: deleting }}
+        >
+          {deleting ? (
+            <ActivityIndicator color={colors.error} />
+          ) : (
+            <Typography variant="labelLg" color="error">Delete Account</Typography>
+          )}
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -357,7 +522,24 @@ const styles = StyleSheet.create({
   },
   proActiveCard: {
     marginBottom: spacing[4],
+  },
+  proActiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  proActiveContent: {
+    flex: 1,
     gap: spacing[1],
+  },
+  planActionBtn: {
+    minHeight: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing[4],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
   proBadge: {
     alignSelf: 'flex-start',
@@ -389,6 +571,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorContainer,
     borderRadius: borderRadius.lg,
     marginTop: spacing[2],
+  },
+  devBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    marginTop: spacing[3],
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.outlineVariant,
+  },
+  deleteBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    paddingVertical: spacing[4],
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.error,
+    marginTop: spacing[3],
   },
   pressed: {
     opacity: 0.85,

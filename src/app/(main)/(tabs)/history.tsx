@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
 import { fetchDoseHistory } from '@/services/supabase/pills';
 import { captureException } from '@/services/sentry';
+import { mergeDoseHistory } from '@/core/doses';
 import type { Dose, Pill } from '@/core/types';
 
 // Smooth dropdown expand/collapse on Android. iOS uses LayoutAnimation by default.
@@ -104,7 +105,8 @@ function buildMedicationGroups(doses: Dose[], pills: Pill[]): MedicationGroup[] 
 export default function HistoryScreen() {
   const user = useAuthStore((s) => s.user);
   const pills = usePillStore((s) => s.pills);
-  const [allDoses, setAllDoses] = useState<Dose[]>([]);
+  const sessionDoses = usePillStore((s) => s.sessionDoses);
+  const [fetchedDoses, setFetchedDoses] = useState<Dose[]>([]);
   const [loading, setLoading] = useState(true);
   // Track which (dateKey, pillId) rows are expanded. A medication is
   // collapsible only when its dose count is >1; singletons render inline
@@ -119,7 +121,7 @@ export default function HistoryScreen() {
       setLoading(true);
       try {
         const doses = await fetchDoseHistory(user.uid, 3);
-        if (!cancelled) setAllDoses(doses);
+        if (!cancelled) setFetchedDoses(doses);
       } catch (err) {
         captureException(err);
       } finally {
@@ -129,6 +131,13 @@ export default function HistoryScreen() {
 
     return () => { cancelled = true; };
   }, [user?.uid]);
+
+  // The tab stays mounted, so the fetch above runs once per sign-in. Doses
+  // taken since then come from the store's session log — no re-query.
+  const allDoses = useMemo(
+    () => mergeDoseHistory(fetchedDoses, sessionDoses),
+    [fetchedDoses, sessionDoses],
+  );
 
   const dayGroups = useMemo<DayGroup[]>(() => {
     const groups = new Map<string, Dose[]>();

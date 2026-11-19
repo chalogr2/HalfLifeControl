@@ -33,7 +33,7 @@ Configured in **RevenueCat dashboard → Products**, mirrored in **Google Play C
 | `ANNUAL` | Yearly | $39.99 | Auto-renew |
 | `LIFETIME` | Lifetime | $99.99 | One-time |
 
-The client paywall (`src/app/(main)/subscription/paywall.tsx`) selects by `packageType`. If you ever rename product slugs or add new tiers, update the package lookup in `paywall.tsx`.
+The client paywall (`src/app/(main)/(tabs)/paywall.tsx`) selects by `packageType`. If you ever rename product slugs or add new tiers, update the package lookup in `paywall.tsx`.
 
 ---
 

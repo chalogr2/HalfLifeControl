@@ -15,10 +15,18 @@ interface SearchResult {
 
 interface DrugSearchBarProps {
   onSelect: (result: SearchResult) => void;
+  /** Fires on every keystroke so a typed name counts even without a tap. */
+  onQueryChange?: (text: string) => void;
   placeholder?: string;
+  error?: string;
 }
 
-export function DrugSearchBar({ onSelect, placeholder = 'Search or type a drug name...' }: DrugSearchBarProps) {
+export function DrugSearchBar({
+  onSelect,
+  onQueryChange,
+  placeholder = 'Search or type a drug name...',
+  error,
+}: DrugSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,14 +85,18 @@ export function DrugSearchBar({ onSelect, placeholder = 'Search or type a drug n
   const handleChangeText = useCallback(
     (text: string) => {
       setQuery(text);
+      onQueryChange?.(text);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => search(text), 200);
     },
-    [search],
+    [search, onQueryChange],
   );
 
   const handleSelect = useCallback(
     (item: SearchResult) => {
+      // Cancel a pending search so the dropdown doesn't pop back open
+      // right after a pick.
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       setQuery(item.name);
       setShowResults(false);
       onSelect(item);
@@ -101,6 +113,7 @@ export function DrugSearchBar({ onSelect, placeholder = 'Search or type a drug n
         onChangeText={handleChangeText}
         autoCapitalize="words"
         autoCorrect={false}
+        error={error}
       />
       {loading && (
         <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />

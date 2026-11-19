@@ -44,3 +44,8 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Local tooling / scratch (never commit)
+.gradle-user-home/
+supabase/.temp/
+docs/supabaseAPI.txt

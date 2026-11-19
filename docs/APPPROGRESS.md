@@ -1186,6 +1186,41 @@ The original Phase 5 (line 614) shipped the RevenueCat client SDK, paywall, and 
 
 ---
 
+## MVP Gap Fixes: Every-N-Days, Schedule Editing, Password Reset, Google Sign-In (2026-11-17)
+
+### Context
+A code audit found functional gaps not tracked in the docs. Scope decisions for the MVP are recorded at the top of `DEVELOPERINPUT.md` (portfolio demo, Android target, iOS-compatible, not published).
+
+### Every-N-days schedules were effectively daily (bug)
+- `nextIntervalDose` had no cycle anchor: it returned "today at the scheduled time" whenever that hadn't passed, so "every 3 days" fired almost daily; `missedScheduledDoses` skipped interval pills entirely.
+- `PillSchedule` gained `startDate` ("YYYY-MM-DD", local) — occurrences fall on `startDate + k·N`. Legacy rows without it fall back to the pill's `createdAt` day (callers pass `pill.createdAt` as `fallbackStart`). Stored in the existing `schedule` JSONB column — **no migration**.
+- `missedScheduledDoses` now enumerates interval occurrences, so autoAssumeTaken covers them.
+- Notifications queue the next **4** interval occurrences (was 1) so reminders keep firing when the app isn't opened for a few cycles; kept small for the iOS 64-pending cap.
+- All calendar math is local-day based with DST-safe day differences.
+
+### Schedule editing (gap)
+- New shared `src/components/pills/ScheduleEditor.tsx` used by both Add Medication and a new **Edit Schedule** sheet on the pill detail screen. Adds a "First dose: Today / Tomorrow (/ Keep current)" choice for every-N-days and a live "Next dose: …" preview.
+- Validation moved to pure `buildSchedule()` in `core/scheduling.ts` (24h time normalization, ≥1 weekday, interval 1–365) so add and edit enforce identical rules.
+- `PillSchedule.effectiveFrom` is stamped on create/edit and is a third floor for the autoAssumeTaken reconcile — otherwise changing 08:00 → 07:00 would make every past day look "missed" at 07:00 and invent duplicate doses.
+- Dashboard "Next dose" now says Today / Tomorrow / weekday / date instead of a bare time.
+
+### Password reset (gap)
+- `resetPasswordForEmail` had no `redirectTo`, so the link opened the Site URL and there was no in-app way to set a new password. Now redirects to `halflifecontrol://reset-password` → `src/app/reset-password.tsx` (root-level so the AuthGate doesn't bounce the freshly-signed-in user out of `(auth)` mid-flow).
+
+### Google Sign-In (gap)
+- Replaced the throwing stub with a Supabase OAuth browser flow (`expo-web-browser` auth session → `halflifecontrol://auth-callback?code=`). Fallback route `src/app/auth-callback.tsx` covers Android delivering the link to the router instead of the auth session.
+- Supabase client switched to `flowType: 'pkce'`; `completeAuthFromUrl()` dedupes the single-use code exchange across both entry points.
+- Dashboard/Google Cloud setup steps: `DEVELOPERINPUT.md` item 15.
+
+### Tests
+- Jest is now actually installed (`jest-expo` preset). `src/core/__tests__/` covers half-life math and scheduling (62 tests), including a regression test for the every-N-days bug and a DST case.
+
+### Verification
+- `npx tsc --noEmit` clean, `npx jest` 62/62, `npx expo export` succeeds for **both android and ios**.
+- Requires one native rebuild (`npx expo run:android`) for `expo-web-browser`.
+
+---
+
 ## What Needs To Happen Next
 
 ### Phase 7: iOS Build + Store Submission
@@ -1357,3 +1392,28 @@ Root config files:
   }
 }
 ```
+
+---
+
+## MVP Polish: Half-Life Input, Live History, Navigation (2026-11-18)
+
+- **Half-life "Missing half-life" with a filled field** — `parseFloat` misread comma decimals from Android keyboards (`"0,5"` → 0, `"2,5"` → 2). New `core/numbers.ts#parsePositiveNumber` accepts `,`/`.` and rejects junk; Add screen shows inline field errors and uses `decimal-pad`. A name typed without tapping a suggestion now counts (`DrugSearchBar#onQueryChange`); editing a curated name converts it to a custom entry with the half-life pre-filled. Picking a suggestion cancels the pending search so the dropdown doesn't reopen.
+- **History didn't show new doses until re-login** — the tab stays mounted and fetched once. `usePillStore.sessionDoses` logs every dose recorded/dismissed on this device (read from the dashboard object `recordDose` already returns); History overlays it via `core/doses.ts#mergeDoseHistory`. No extra database reads. Dismissed doses no longer count as taken.
+- **Timers followed the oldest active dose** — `core/doses.ts#latestActiveDose` (dashboard + detail) picks the newest non-eliminated dose.
+- **Navigation standardised** — shared `components/ui/ScreenHeader` (✕ for slide-up screens: Add, Medication detail; ← for pages: Pro, Legal). Paywall moved to `(main)/(tabs)/paywall.tsx` as a hidden tab (`href: null`) so the bottom bar stays visible; tabs use `backBehavior="history"` so back returns to the previous tab. Free-tier limit is checked on the dashboard before opening the Add form. Dashboard avatar opens Settings.
+- **Copy** — demo Terms of Service and Privacy Policy written; removed the Apple Watch/Health promise from the paywall.
+- Tests: `src/core/__tests__/doses.test.ts` (81 total passing).
+
+---
+
+## MVP Finish: Delete Account, Unsubscribe, Rejected-Write Recovery (2026-11-18)
+
+- **`pills_dosage_mg_check` on FDA drugs** — FDA results have no default dose, so an empty dosage was saved as 0, which the DB rejects (`dosage_mg > 0`). The optimistic local copy still showed the pill, and taking it then failed on the dose FK. Dosage is now required on the Add form (placeholder no longer looks like a value).
+- **Rejected writes froze sync** — a WAL entry the server rejects was retried forever, and `loadDashboard` skips the server sync while anything is pending, so one bad row stopped all syncing. `flushWriteQueue` now drops permanent failures (SQLSTATE class 22/23, 42501), stops at the first transient failure to keep order, and the immediate fire-and-forget attempts leave FK misses (23503, parent insert may be in flight) to the ordered flush.
+- **Delete account** — `supabase/functions/delete-account` resolves the user from the session JWT and calls `auth.admin.deleteUser` (cascade removes all data). Client `deleteAccount()` clears reminders, local cache/WAL and the session. Settings: two-step confirm under Sign Out.
+- **Unsubscribe** — subscription service now returns `ProStatus` (plan, expiry, willRenew, managementURL; lifetime = no expiration). Settings Pro card shows the plan and an Unsubscribe button, hidden for Lifetime. Test Store (`test_` key) can't cancel purchases, so cancellation is simulated per user in AsyncStorage: Pro until the end of the paid period, then Free, with a Resume option; a new purchase clears it. Real store keys open the Play subscriptions page.
+- Removed the dashboard avatar.
+- **Login/Register** — removed the disabled Apple button; a single full-width "Continue with Google" button (Google logo) under an "OR" divider. Re-add Apple in the same spot when it's enabled.
+- **Legal pages keep the tab bar from Settings** — content moved to `components/legal/LegalDocument`. Settings opens `(main)/(tabs)/policies` (hidden tab, back → Settings); root `app/legal.tsx` stays for signed-out Register links. Named `policies` because groups don't add URL segments, so a second `legal.tsx` would collide with `/legal`.
+- `delete-account` Edge Function deployed 2026-11-19 (verify JWT on); deletion verified by the developer.
+- **Sentry configured (free Developer plan)** — DSN in `.env`; `app.json` plugin + `android/sentry.properties` set to org `chalodev`, project `halflifecontrol`. Events tagged `environment: development|production`; SDK debug logging off. Dev-only "send test error" button in Settings (`services/sentry#sendTestError`, flushes immediately). Release builds upload source maps only with a `SENTRY_AUTH_TOKEN`; without one set `SENTRY_DISABLE_AUTO_UPLOAD=true`.

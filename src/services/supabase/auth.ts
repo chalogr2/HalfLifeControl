@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { supabase } from './config';
 import { clearUserCache } from '@/services/cache';
 import type { UserProfile, UserSettings } from '@/core/types';
@@ -59,9 +60,107 @@ export async function signOut(): Promise<void> {
   if (uid) await clearUserCache(uid).catch(() => {});
 }
 
+/**
+ * Permanently delete the signed-in user's account and all their data.
+ *
+ * The `delete-account` Edge Function verifies the session JWT and deletes the
+ * auth user server-side (cascading to profile, pills and doses). Only after it
+ * succeeds do we tear down the device: reminders, the local encrypted cache
+ * (including any unsent write-ahead-log entries) and the session. Local
+ * sign-out only — the server session no longer exists to revoke.
+ */
+export async function deleteAccount(): Promise<void> {
+  const session = await getSession();
+  if (!session) throw new Error('You need to be signed in to delete your account.');
+
+  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  if (error) {
+    throw new Error('Could not delete your account. Check your connection and try again.');
+  }
+
+  const { cancelAllReminders } = await import('@/services/notifications');
+  await cancelAllReminders().catch(() => {});
+  await clearUserCache(session.userId).catch(() => {});
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+}
+
+// ─── Deep-link auth (password recovery + OAuth) ──────
+
+/**
+ * In-app routes that Supabase redirects back to. Each must be listed under
+ * Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
+ * (`halflifecontrol://**` covers both), or Supabase falls back to the Site URL
+ * and the link opens a browser page instead of the app.
+ */
+export const AUTH_REDIRECT_PATHS = {
+  resetPassword: 'reset-password',
+  oauthCallback: 'auth-callback',
+} as const;
+
+/** `halflifecontrol://<path>` in dev/prod builds (scheme from app.json). */
+export function authRedirectUrl(path: string): string {
+  return Linking.createURL(path);
+}
+
 export async function resetPassword(email: string): Promise<void> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: authRedirectUrl(AUTH_REDIRECT_PATHS.resetPassword),
+  });
   if (error) throw error;
+}
+
+/** Set a new password for the signed-in user (used after a recovery link). */
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
+/** Read a param from either the query string or the #fragment of a redirect URL. */
+function redirectParam(url: string, name: string): string | null {
+  const [beforeHash, hash = ''] = url.split('#');
+  const query = beforeHash.split('?')[1] ?? '';
+  return new URLSearchParams(query).get(name) ?? new URLSearchParams(hash).get(name);
+}
+
+// A PKCE code is single-use. Both the OAuth browser session and the
+// deep-link route screen may see the same redirect URL (Android delivers it
+// to the router *and* to openAuthSessionAsync), so concurrent callers share
+// one in-flight exchange instead of the loser failing with "code already used".
+const exchanges = new Map<string, Promise<{ userId: string; email: string; displayName: string | null }>>();
+
+/**
+ * Finish a Supabase redirect (`...?code=` on success, `...?error_description=`
+ * on failure) by exchanging the one-time code for a session. Resolves with the
+ * signed-in user; `onAuthStateChange` also fires, so the root AuthGate picks
+ * the session up on its own.
+ */
+export function completeAuthFromUrl(
+  url: string,
+): Promise<{ userId: string; email: string; displayName: string | null }> {
+  const errorDescription = redirectParam(url, 'error_description');
+  if (errorDescription) {
+    return Promise.reject(new Error(errorDescription.replace(/\+/g, ' ')));
+  }
+
+  const code = redirectParam(url, 'code');
+  if (!code) return Promise.reject(new Error('The sign-in link is missing its code.'));
+
+  const existing = exchanges.get(code);
+  if (existing) return existing;
+
+  const exchange = (async () => {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    const meta = data.user.user_metadata ?? {};
+    return {
+      userId: data.user.id,
+      email: data.user.email ?? '',
+      // Google puts the name in full_name/name; email sign-ups use display_name.
+      displayName: (meta.display_name ?? meta.full_name ?? meta.name ?? null) as string | null,
+    };
+  })();
+  exchanges.set(code, exchange);
+  return exchange;
 }
 
 interface ProfileFallback {

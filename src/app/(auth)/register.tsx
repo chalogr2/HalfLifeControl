@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Typography, Button, Input } from '@/components/ui';
 import { colors, spacing, borderRadius } from '@/theme';
@@ -74,7 +75,10 @@ export default function RegisterScreen() {
       setUser(profile);
     } catch (err: unknown) {
       if (!isGoogleCancellation(err)) {
-        Alert.alert('Google Sign-In Failed', 'Something went wrong. Please try again.');
+        Alert.alert(
+          'Google Sign-In Failed',
+          err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.',
+        );
       }
     } finally {
       setGoogleLoading(false);
@@ -188,38 +192,28 @@ export default function RegisterScreen() {
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Typography variant="labelMd" color="outline" style={styles.dividerLabel}>
-                OR CONTINUE WITH
+                OR
               </Typography>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social sign-in */}
-            <View style={styles.socialRow}>
-              <Pressable
-                style={[styles.socialButton, styles.socialButtonEnabled]}
-                onPress={handleGoogleSignIn}
-                disabled={googleLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Sign up with Google"
-              >
-                <Typography variant="labelLg" color="onSurface">
-                  {googleLoading ? 'Signing in...' : 'Google'}
-                </Typography>
-              </Pressable>
-              <Pressable
-                style={styles.socialButton}
-                disabled
-                accessibilityRole="button"
-                accessibilityLabel="Sign up with Apple, available on iOS"
-              >
-                <Typography variant="labelLg" color="outline">
-                  Apple
-                </Typography>
-                <Typography variant="labelSm" color="outline">
-                  iOS only
-                </Typography>
-              </Pressable>
-            </View>
+            {/* Social sign-in. Apple is added here once it's enabled (iOS). */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.googleButton,
+                (pressed || googleLoading) && styles.googleButtonPressed,
+              ]}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Sign up with Google"
+              accessibilityState={{ busy: googleLoading }}
+            >
+              <Ionicons name="logo-google" size={20} color={colors.onSurface} />
+              <Typography variant="labelLg" color="onSurface">
+                {googleLoading ? 'Signing in...' : 'Continue with Google'}
+              </Typography>
+            </Pressable>
           </View>
 
           {/* Footer */}
@@ -312,21 +306,17 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing[4],
     letterSpacing: 2,
   },
-  socialRow: {
-    flexDirection: 'row',
-    gap: spacing[4],
-  },
-  socialButton: {
-    flex: 1,
+  googleButton: {
     height: 56,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[3],
     backgroundColor: colors.surfaceContainerLow,
     borderRadius: borderRadius.xl,
-    opacity: 0.5,
   },
-  socialButtonEnabled: {
-    opacity: 1,
+  googleButtonPressed: {
+    opacity: 0.7,
   },
   footer: {
     flexDirection: 'row',

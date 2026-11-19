@@ -6,19 +6,25 @@ import {
   Pressable,
   Alert,
   TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { Typography } from '@/components/ui';
+import { Typography, Button, ScreenHeader } from '@/components/ui';
+import { ScheduleEditor, type ScheduleEditorValue } from '@/components/pills';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePillStore } from '@/stores/usePillStore';
-import { describeSchedule } from '@/core/scheduling';
+import { describeSchedule, buildSchedule, sameSchedule, toLocalDateKey } from '@/core/scheduling';
+import { latestActiveDose } from '@/core/doses';
+import { parsePositiveNumber } from '@/core/numbers';
 import { timerDurationMinutes, formatTimeRemaining, timerMinutesRemaining } from '@/core/halflife';
 import { colors, spacing, borderRadius, MIN_TOUCH_TARGET } from '@/theme';
-import type { TimerType, Dose, DurationType } from '@/core/types';
+import type { TimerType, Dose, DurationType, Pill } from '@/core/types';
 
 interface TimerConfig {
   type: TimerType;
@@ -237,6 +243,17 @@ function InactiveTimerRing({
   );
 }
 
+/**
+ * The cycle anchor of an existing every-N-days schedule: its stored
+ * startDate, or (legacy rows saved before startDate existed) the pill's
+ * createdAt day — the same fallback the scheduler itself uses.
+ */
+function intervalKeepStartDate(pill: Pill): string | undefined {
+  const s = pill.schedule;
+  if (!s || s.frequency !== 'every_n_days') return undefined;
+  return s.startDate ?? toLocalDateKey(pill.createdAt);
+}
+
 export default function PillDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -246,14 +263,13 @@ export default function PillDetailScreen() {
   const pill = useMemo(() => pills.find((p) => p.id === id), [pills, id]);
   const activeDose: Dose | undefined = useMemo(() => {
     if (!pill) return undefined;
-    const dose = activeDoses.find((d) => d.pillId === pill.id);
-    if (!dose) return undefined;
-    if (dose.eliminationAt.getTime() <= Date.now()) return undefined;
-    return dose;
+    return latestActiveDose(activeDoses, pill.id);
   }, [activeDoses, pill]);
 
   const [editingDosage, setEditingDosage] = useState(false);
   const [dosageText, setDosageText] = useState('');
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleEditorValue | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   // Timer selection is local-only while the screen is open, and persists exactly
   // once on unmount if the value changed. This avoids racing concurrent Firestore
@@ -431,8 +447,8 @@ export default function PillDetailScreen() {
   };
 
   const handleSaveDosage = async () => {
-    const newDosage = parseFloat(dosageText);
-    if (!user || isNaN(newDosage) || newDosage <= 0) {
+    const newDosage = parsePositiveNumber(dosageText);
+    if (!user || newDosage === null) {
       setEditingDosage(false);
       return;
     }
@@ -445,24 +461,54 @@ export default function PillDetailScreen() {
     setEditingDosage(true);
   };
 
+  // Existing every-N-days cycle anchor, offered as "Keep current" so changing
+  // the time or interval doesn't silently shift which days the user takes it.
+  const keepStartDate = intervalKeepStartDate(pill);
+
+  const startEditSchedule = () => {
+    const s = pill.schedule;
+    if (!s) return;
+    setScheduleDraft({
+      frequency: s.frequency,
+      timeOfDay: s.timeOfDay,
+      daysOfWeek: s.daysOfWeek ?? [],
+      intervalDays: String(s.intervalDays ?? 2),
+      intervalStart: keepStartDate ? 'keep' : 'today',
+    });
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!user || !scheduleDraft || !pill.schedule) return;
+    // The editor never offers 'as_needed' here (that would turn the pill into
+    // a one-time pill with a different lifecycle), so frequency is a real one.
+    if (scheduleDraft.frequency === 'as_needed') return;
+
+    const built = buildSchedule({ ...scheduleDraft, frequency: scheduleDraft.frequency }, new Date(), keepStartDate);
+    if (!built.ok) {
+      Alert.alert(built.title, built.message);
+      return;
+    }
+    if (sameSchedule(built.schedule, pill.schedule)) {
+      setScheduleDraft(null);
+      return;
+    }
+
+    setSavingSchedule(true);
+    try {
+      // Reminders re-schedule automatically: the dashboard's effect re-runs
+      // scheduleAllPillReminders whenever the pill list changes.
+      await updatePill(user.uid, pill.id, { schedule: built.schedule });
+      setScheduleDraft(null);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update schedule.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.closeButton}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={8}
-        >
-          <Ionicons name="close" size={24} color={colors.onSurface} />
-        </Pressable>
-        <Typography variant="titleMd" color="primary" style={styles.headerTitle}>
-          HalfLifeControl
-        </Typography>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title="Medication" variant="close" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Pill name + subtitle */}
@@ -573,7 +619,7 @@ export default function PillDetailScreen() {
                 style={styles.dosageInput}
                 value={dosageText}
                 onChangeText={setDosageText}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 autoFocus
                 onBlur={handleSaveDosage}
                 onSubmitEditing={handleSaveDosage}
@@ -596,6 +642,29 @@ export default function PillDetailScreen() {
           </Pressable>
         </View>
 
+        {/* Schedule — stack (scheduled) pills only */}
+        {pill.schedule && (
+          <View style={styles.dosageSection}>
+            <Typography variant="titleLg" color="onSurface">
+              Schedule
+            </Typography>
+            <Typography variant="bodyLg" color="onSurfaceVariant" style={styles.scheduleSummary}>
+              {describeSchedule(pill.schedule)}
+            </Typography>
+            <Pressable
+              style={({ pressed }) => [styles.editScheduleButton, pressed && styles.editScheduleButtonPressed]}
+              onPress={startEditSchedule}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit schedule. Currently ${describeSchedule(pill.schedule)}`}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+              <Typography variant="titleMd" color="primary">
+                Edit Schedule
+              </Typography>
+            </Pressable>
+          </View>
+        )}
+
         {/* Delete pill */}
         <Pressable
           style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}
@@ -609,6 +678,45 @@ export default function PillDetailScreen() {
           </Typography>
         </Pressable>
       </ScrollView>
+
+      {/* Edit schedule sheet */}
+      <Modal
+        visible={scheduleDraft !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setScheduleDraft(null)}
+      >
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.sheet}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Typography variant="headlineSm" color="primary" style={styles.sheetTitle}>
+                Edit Schedule
+              </Typography>
+              {scheduleDraft && (
+                <ScheduleEditor
+                  value={scheduleDraft}
+                  onChange={setScheduleDraft}
+                  keepStartDate={keepStartDate}
+                />
+              )}
+              <View style={styles.sheetActions}>
+                <Button title="Save Schedule" onPress={handleSaveSchedule} loading={savingSchedule} />
+                <Pressable
+                  style={styles.sheetCancel}
+                  onPress={() => setScheduleDraft(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel editing schedule"
+                >
+                  <Typography variant="bodyLg" color="primary">Cancel</Typography>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -787,6 +895,48 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.error,
     marginBottom: spacing[8],
+  },
+  scheduleSummary: {
+    marginTop: spacing[1],
+  },
+  editScheduleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    minHeight: MIN_TOUCH_TARGET,
+    marginTop: spacing[4],
+    borderRadius: borderRadius.xl,
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  editScheduleButtonPressed: {
+    opacity: 0.7,
+  },
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  sheet: {
+    maxHeight: '90%',
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[6],
+    paddingBottom: spacing[8],
+  },
+  sheetTitle: {
+    marginBottom: spacing[4],
+  },
+  sheetActions: {
+    marginTop: spacing[4],
+    gap: spacing[2],
+  },
+  sheetCancel: {
+    minHeight: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteButtonPressed: {
     backgroundColor: colors.errorContainer + '33',
